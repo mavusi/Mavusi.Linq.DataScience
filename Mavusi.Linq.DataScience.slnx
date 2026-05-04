@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Mavusi.Linq.DataScience.Tests/Mavusi.Linq.DataScience.Tests.csproj" />
+  <Project Path="Mavusi.Linq.DataScience/Mavusi.Linq.DataScience.csproj" />
+</Solution>
