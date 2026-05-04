@@ -1,9 +1,39 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+
+    <!-- NuGet Package Metadata -->
+    <PackageId>Mavusi.Linq.DataScience</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Mavusi</Authors>
+    <Company>Mavusi</Company>
+    <Description>A comprehensive .NET library that extends LINQ to Objects with powerful statistical and data science features including standard deviation, correlation, rolling windows, time-series analysis, and linear algebra operations.</Description>
+    <PackageTags>linq;data-science;statistics;correlation;time-series;rolling-windows;linear-algebra;machine-learning;analytics;math</PackageTags>
+    <PackageProjectUrl>https://github.com/mavusi/Mavusi.Linq.DataScience</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/mavusi/Mavusi.Linq.DataScience</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReleaseNotes>Initial release with statistical extensions, correlation analysis, rolling windows, time-series operations, and linear algebra support.</PackageReleaseNotes>
+    <Copyright>Copyright (c) 2025 Mavusi</Copyright>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+  </ItemGroup>
 
 </Project>
