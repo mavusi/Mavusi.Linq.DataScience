@@ -48,6 +48,16 @@ A comprehensive .NET library that extends LINQ to Objects with powerful statisti
 - **Normalization**: Normalize vectors to unit length
 - **Identity Matrices**: Create identity matrices
 
+### 🌍 Geospatial Extensions
+- **Haversine Distance**: Calculate great-circle distances between coordinates (km/miles)
+- **Radius Filtering**: Find all items within a specified radius
+- **Nearest Neighbor**: Find the closest item(s) to a target location
+- **Geographic Center**: Calculate the centroid of multiple coordinates
+- **Bounding Boxes**: Create and query geographical bounds
+- **Route Calculations**: Calculate total distance for routes
+- **Proximity Clustering**: Group nearby points together
+- **Pairwise Distances**: Calculate all distances between coordinate pairs
+
 ## Installation
 
 Add this library to your project:
@@ -229,6 +239,67 @@ var result = matrix1.Multiply(vector);
 
 // Identity matrix
 var identity = LinearAlgebraExtensions.CreateIdentityMatrix(3);
+```
+
+### Geospatial Analysis
+
+```csharp
+// Define coordinates
+var newYork = new GeoCoordinate(40.7128, -74.0060);
+var losAngeles = new GeoCoordinate(34.0522, -118.2437);
+
+// Calculate distance
+var distanceKm = newYork.HaversineDistance(losAngeles);     // ~3944 km
+var distanceMiles = newYork.HaversineDistanceMiles(losAngeles); // ~2451 miles
+
+// Find locations within radius
+var restaurants = new[]
+{
+    new { Name = "Pizza Place", Location = new GeoCoordinate(40.748817, -73.985428) },
+    new { Name = "Burger Joint", Location = new GeoCoordinate(40.750580, -73.993584) },
+    new { Name = "Sushi Bar", Location = new GeoCoordinate(40.752726, -73.977229) }
+};
+
+var myLocation = new GeoCoordinate(40.750, -73.985);
+var nearbyRestaurants = restaurants
+    .WithinRadius(r => r.Location, myLocation, radiusKm: 1.0)
+    .ToList();
+
+// Find nearest locations
+var nearest = restaurants.Nearest(r => r.Location, myLocation);
+var nearest3 = restaurants.NearestN(r => r.Location, myLocation, 3).ToList();
+
+// Calculate geographic center
+var cities = new[]
+{
+    new GeoCoordinate(40.7128, -74.0060),  // New York
+    new GeoCoordinate(34.0522, -118.2437), // Los Angeles
+    new GeoCoordinate(41.8781, -87.6298)   // Chicago
+};
+var center = cities.GeographicCenter();
+
+// Get bounding box
+var bounds = cities.BoundingBox();
+bool isInside = bounds.Contains(new GeoCoordinate(40.0, -75.0));
+
+// Calculate route distance
+var roadTrip = new[]
+{
+    new GeoCoordinate(34.0522, -118.2437), // Los Angeles
+    new GeoCoordinate(36.7783, -119.4179), // Fresno
+    new GeoCoordinate(37.7749, -122.4194), // San Francisco
+    new GeoCoordinate(38.5816, -121.4944)  // Sacramento
+};
+var totalDistance = roadTrip.TotalDistance(); // Total km
+
+// Group by proximity
+var stores = new[]
+{
+    new { Id = 1, Location = new GeoCoordinate(40.0, -74.0) },
+    new { Id = 2, Location = new GeoCoordinate(40.01, -74.0) },
+    new { Id = 3, Location = new GeoCoordinate(41.0, -73.0) }
+};
+var clusters = stores.GroupByProximity(s => s.Location, thresholdKm: 10).ToList();
 ```
 
 ## Requirements
