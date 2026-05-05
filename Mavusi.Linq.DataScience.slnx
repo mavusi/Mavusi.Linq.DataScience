@@ -1,4 +1,6 @@
 <Solution>
+  <Project Path="Mavusi.Linq.DataScience.GpuBound.FastMode.Tests/Mavusi.Linq.DataScience.GpuBound.FastMode.Tests.csproj" Id="24757238-294c-4767-a4fe-a2c140dce556" />
+  <Project Path="Mavusi.Linq.DataScience.GpuBound.FastMode/Mavusi.Linq.DataScience.GpuBound.FastMode.csproj" Id="abd83bfa-5049-4406-b06a-de8e73894556" />
   <Project Path="Mavusi.Linq.DataScience.GpuBound/Mavusi.Linq.DataScience.GpuBound.csproj" Id="ba72b541-0180-4a44-96b9-a43fae0fabcf">
     <Build Solution="Debug|*" Project="false" />
   </Project>
