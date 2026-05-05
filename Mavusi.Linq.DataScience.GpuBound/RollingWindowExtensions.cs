@@ -9,7 +9,7 @@ namespace Mavusi.Linq.DataScience.GpuBound;
 public static class RollingWindowExtensions
 {
     private static (Context Context, Accelerator Accelerator) GpuContext => 
-        CorrelationExtensions.GpuContext;
+        GpuContextBase.GpuContext;
 
     /// <summary>
     /// Calculates a rolling average (moving average) with a specified window size using GPU acceleration.

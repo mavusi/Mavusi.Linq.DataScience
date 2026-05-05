@@ -9,7 +9,7 @@ namespace Mavusi.Linq.DataScience.GpuBound;
 public static class DistributionExtensions
 {
     private static (Context Context, Accelerator Accelerator) GpuContext => 
-        CorrelationExtensions.GpuContext;
+        GpuContextBase.GpuContext;
 
     /// <summary>
     /// Calculates the median (50th percentile) of a sequence of values using GPU acceleration.

@@ -10,7 +10,7 @@ namespace Mavusi.Linq.DataScience.GpuBound;
 public static class TimeSeriesExtensions
 {
     private static (Context Context, Accelerator Accelerator) GpuContext => 
-        CorrelationExtensions.GpuContext;
+        GpuContextBase.GpuContext;
 
     /// <summary>
     /// Calculates the difference between consecutive values (first-order differencing) using GPU acceleration.

@@ -18,7 +18,7 @@ public static class LinearAlgebraExtensions
         return new Vector(source);
     }
     private static (Context Context, Accelerator Accelerator) GpuContext => 
-        CorrelationExtensions.GpuContext;
+        GpuContextBase.GpuContext;
 
     /// <summary>
     /// Calculates the dot product of two vectors using GPU acceleration.

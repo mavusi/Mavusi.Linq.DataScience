@@ -143,8 +143,8 @@ public class CorrelationExtensionsTests
     {
         // Arrange - large dataset to benefit from GPU parallelization
         var size = 10000;
-        var x = Enumerable.Range(0, size).Select(i => (double)i).ToArray();
-        var y = Enumerable.Range(0, size).Select(i => (double)i * 2 + 5).ToArray();
+        var x = Enumerable.Range(0, size).Select(i => (float)i).ToArray();
+        var y = Enumerable.Range(0, size).Select(i => (float)i * 2 + 5).ToArray();
 
         // Act
         var result = x.CorrelationGpu(y);

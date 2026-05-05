@@ -1,8 +1,5 @@
 using ILGPU;
 using ILGPU.Runtime;
-using ILGPU.Runtime.Cuda;
-using ILGPU.Runtime.OpenCL;
-using ILGPU.Runtime.CPU;
 
 namespace Mavusi.Linq.DataScience.GpuBound;
 
@@ -11,36 +8,8 @@ namespace Mavusi.Linq.DataScience.GpuBound;
 /// </summary>
 public static class CorrelationExtensions
 {
-    private static readonly Lazy<(Context, Accelerator)> _gpuContext = new(() => InitializeGpu());
-
-    private static (Context, Accelerator) InitializeGpu()
-    {
-        var context = Context.CreateDefault();
-
-        // Try to find a device that supports double precision
-        // Prefer CUDA, then OpenCL, then CPU (which always supports doubles)
-        var device = context.Devices.FirstOrDefault(d => 
-                         d.AcceleratorType == AcceleratorType.Cuda)
-                     
-                     ?? context.Devices.FirstOrDefault(d => 
-                         d.AcceleratorType == AcceleratorType.OpenCL)
-                     
-                     ?? context.Devices.FirstOrDefault(d => 
-                         d.AcceleratorType == AcceleratorType.CPU);
-
-        if (device == null)
-        {
-            throw new NotSupportedException("No compatible accelerator found.");
-        }
-
-        var accelerator = device.CreateAccelerator(context);
-        return (context, accelerator);
-    }
-
-    /// <summary>
-    /// Gets the GPU context and accelerator. Initializes on first access.
-    /// </summary>
-    internal static (Context Context, Accelerator Accelerator) GpuContext => _gpuContext.Value;
+    private static (Context Context, Accelerator Accelerator) GpuContext => 
+        GpuContextBase.GpuContext;
 
     /// <summary>
     /// Calculates the Pearson correlation coefficient between two sequences using GPU acceleration.
@@ -263,11 +232,6 @@ public static class CorrelationExtensions
     /// </summary>
     public static void DisposeGpuContext()
     {
-        if (_gpuContext.IsValueCreated)
-        {
-            var (context, accelerator) = _gpuContext.Value;
-            accelerator.Dispose();
-            context.Dispose();
-        }
+        GpuContextBase.DisposeGpuContext();
     }
 }

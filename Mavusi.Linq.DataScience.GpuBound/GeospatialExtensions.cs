@@ -11,7 +11,7 @@ namespace Mavusi.Linq.DataScience.GpuBound;
 public static class GeospatialExtensions
 {
     private static (Context Context, Accelerator Accelerator) GpuContext => 
-        CorrelationExtensions.GpuContext;
+        GpuContextBase.GpuContext;
 
     private const double EarthRadiusKm = 6371.0;
     private const double EarthRadiusMiles = 3959.0;

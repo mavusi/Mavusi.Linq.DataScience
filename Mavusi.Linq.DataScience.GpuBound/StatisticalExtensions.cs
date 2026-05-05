@@ -9,7 +9,7 @@ namespace Mavusi.Linq.DataScience.GpuBound;
 public static class StatisticalExtensions
 {
     private static (Context Context, Accelerator Accelerator) GpuContext => 
-        CorrelationExtensions.GpuContext;
+        GpuContextBase.GpuContext;
 
     /// <summary>
     /// Calculates the population standard deviation of a sequence of values using GPU acceleration.
