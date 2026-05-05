@@ -21,10 +21,12 @@ public static class CorrelationExtensions
         // Prefer CUDA, then OpenCL, then CPU (which always supports doubles)
         var device = context.Devices.FirstOrDefault(d => 
                          d.AcceleratorType == AcceleratorType.Cuda)
+                     
                      ?? context.Devices.FirstOrDefault(d => 
-                         d.AcceleratorType == AcceleratorType.CPU)
+                         d.AcceleratorType == AcceleratorType.OpenCL)
+                     
                      ?? context.Devices.FirstOrDefault(d => 
-                         d.AcceleratorType == AcceleratorType.OpenCL);
+                         d.AcceleratorType == AcceleratorType.CPU);
 
         if (device == null)
         {
