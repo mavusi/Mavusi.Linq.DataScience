@@ -1,20 +1,29 @@
 # Mavusi.Linq.DataScience
 
-A comprehensive .NET library that extends LINQ to Objects with powerful statistical and data science features, **now with GPU acceleration** using ILGPU for high-performance computing.
+A comprehensive .NET library that extends LINQ to Objects with powerful statistical and data science features. The library is split into two packages for optimal dependency management:
 
-## Features
+- **Mavusi.Linq.DataScience** - CPU-optimized core library (this package)
+- **Mavusi.Linq.DataScience.GpuBound** - GPU-accelerated extensions with ILGPU (optional)
 
-### ⚡ GPU-Accelerated Extensions (NEW!)
-All statistical and data science operations now have GPU-accelerated versions for **massive performance gains** on large datasets:
-- **GPU Statistical Operations**: `StandardDeviationGpu()`, `VarianceGpu()`
-- **GPU Correlation**: `CorrelationGpu()`, `CovarianceGpu()`
-- **GPU Distribution Analysis**: `MedianGpu()`, `QuartileGpu()`, `PercentileGpu()`, `SkewnessGpu()`, `KurtosisGpu()`
-- **GPU Rolling Windows**: `RollingAverageGpu()`, `RollingSumGpu()`, `RollingMinGpu()`, `RollingMaxGpu()`, `RollingStandardDeviationGpu()`
-- **GPU Time-Series**: `DifferenceGpu()`, `PercentageChangeGpu()`, `CumulativeSumGpu()`, `ExponentialMovingAverageGpu()`, `ReturnsGpu()`, `DetectOutliersGpu()`
-- **GPU Linear Algebra**: `DotProductGpu()`, `AddGpu()`, `SubtractGpu()`, `MultiplyGpu()`, `MagnitudeGpu()`, `NormalizeGpu()`
-- **GPU Geospatial**: `HaversineDistanceGpu()`, `CalculateDistancesGpu()`, `WithinRadiusGpu()`, `NearestGpu()`, `PairwiseDistancesGpu()`
+## 📦 Installation
 
-All GPU methods are suffixed with `Gpu` and live in the `Mavusi.Linq.DataScience.GpuBound` namespace. They automatically fall back gracefully on hardware without GPU support.
+### Core Package (CPU-Optimized)
+
+```bash
+dotnet add package Mavusi.Linq.DataScience
+```
+
+This package includes all CPU-optimized statistical, correlation, distribution, time-series, linear algebra, and geospatial operations with zero external dependencies.
+
+### GPU-Accelerated Package (Optional)
+
+```bash
+dotnet add package Mavusi.Linq.DataScience.GpuBound
+```
+
+Add this package for **up to 100x performance** on large datasets (10,000+ elements) using GPU acceleration via ILGPU. All GPU methods are suffixed with `Gpu` and can be used as drop-in replacements.
+
+## ✨ Features Overview
 
 ### 📊 Statistical Extensions
 - **Standard Deviation**: Calculate population and sample standard deviation
@@ -70,68 +79,13 @@ All GPU methods are suffixed with `Gpu` and live in the `Mavusi.Linq.DataScience
 - **Proximity Clustering**: Group nearby points together
 - **Pairwise Distances**: Calculate all distances between coordinate pairs
 
-## Installation
+## 📖 Usage Examples
 
-Install via NuGet Package Manager:
+### CPU-Optimized Methods (Core Package)
 
-```bash
-dotnet add package Mavusi.Linq.DataScience
-```
+All examples below use the **Mavusi.Linq.DataScience** package with CPU-optimized implementations.
 
-Or via NuGet Package Manager Console:
-
-```powershell
-Install-Package Mavusi.Linq.DataScience
-```
-
-## Usage Examples
-
-### 🚀 GPU-Accelerated Operations (NEW!)
-
-For massive performance gains on large datasets, use the GPU-accelerated versions:
-
-```csharp
-using Mavusi.Linq.DataScience.GpuBound;
-
-// Standard GPU operations
-var largeDataset = Enumerable.Range(0, 1000000).Select(i => (double)i).ToArray();
-var y = Enumerable.Range(0, 1000000).Select(i => (double)i * 2 + 5).ToArray();
-
-// GPU-accelerated correlation (up to 100x faster on large datasets!)
-var correlation = largeDataset.CorrelationGpu(y);
-
-// GPU-accelerated standard deviation
-var stdDev = largeDataset.StandardDeviationGpu();
-
-// GPU-accelerated rolling average
-var rollingAvg = largeDataset.RollingAverageGpu(windowSize: 100);
-
-// GPU-accelerated linear algebra
-var v1 = new[] { 1.0, 2.0, 3.0 };
-var v2 = new[] { 4.0, 5.0, 6.0 };
-var dotProduct = v1.DotProductGpu(v2);
-
-// GPU-accelerated geospatial calculations
-var locations = new[]
-{
-    new GeoCoordinate(40.7128, -74.0060),
-    new GeoCoordinate(34.0522, -118.2437),
-    // ... thousands more locations
-};
-var center = new GeoCoordinate(40.0, -75.0);
-var distances = locations.CalculateDistancesGpu(center);
-
-// GPU methods automatically handle device compatibility
-// and gracefully skip tests on unsupported hardware
-```
-
-**Performance Tips:**
-- GPU acceleration provides the most benefit with datasets of 1,000+ elements
-- For smaller datasets (<100 elements), CPU methods may be faster due to overhead
-- GPU methods automatically detect and use available GPU hardware
-- All GPU methods are fully tested and produce identical results to CPU versions
-
-### Statistical Operations
+#### Statistical Operations
 
 ```csharp
 using Mavusi.Linq.DataScience;
@@ -145,11 +99,21 @@ var sampleStdDev = data.StandardDeviationSample();
 // Variance
 var variance = data.Variance();
 var sampleVariance = data.VarianceSample();
+
+// With selectors
+var people = new[]
+{
+    new { Name = "Alice", Age = 25.0 },
+    new { Name = "Bob", Age = 30.0 }
+};
+var ageStdDev = people.StandardDeviation(p => p.Age);
 ```
 
-### Correlation Analysis
+#### Correlation Analysis
 
 ```csharp
+using Mavusi.Linq.DataScience;
+
 var x = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
 var y = new[] { 2.0, 4.0, 6.0, 8.0, 10.0 };
 
@@ -168,68 +132,11 @@ var people = new[]
 var heightWeightCorr = people.Correlation(p => p.Height, p => p.Weight);
 ```
 
-### Rolling Windows
+#### Distribution Analysis
 
 ```csharp
-var data = new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 };
+using Mavusi.Linq.DataScience;
 
-// Create rolling windows
-var windows = data.RollingWindow(3);
-// Results: [1,2,3], [2,3,4], [3,4,5], [4,5,6]
-
-// Moving average
-var movingAvg = data.RollingAverage(3);
-
-// Rolling sum
-var rollingSum = data.RollingSum(3);
-
-// Custom aggregation
-var rollingMax = data.RollingAggregate(3, w => w.Max());
-
-// Windows with custom step
-var steppedWindows = data.RollingWindow(3, step: 2);
-// Results: [1,2,3], [3,4,5]
-```
-
-### Time-Series Analysis
-
-```csharp
-// Create time-series data
-var timeSeries = new[]
-{
-    new TimeSeriesPoint<double>(DateTime.Today, 100.0),
-    new TimeSeriesPoint<double>(DateTime.Today.AddDays(1), 105.0),
-    new TimeSeriesPoint<double>(DateTime.Today.AddDays(2), 103.0)
-};
-
-// Calculate percentage change
-var changes = timeSeries.PercentageChange();
-
-// Resample to different interval
-var hourlyData = timeSeries.Resample(TimeSpan.FromHours(1), values => values.Average());
-
-// Moving average
-var ma = timeSeries.MovingAverage(3);
-
-// Exponential moving average
-var ema = timeSeries.ExponentialMovingAverage(alpha: 0.3);
-
-// Fill gaps in data
-var filled = timeSeries.FillGaps(TimeSpan.FromDays(1), fillValue: 0.0);
-
-// Convert from existing data
-var stocks = new[]
-{
-    new { Date = DateTime.Today, Price = 100.0 },
-    new { Date = DateTime.Today.AddDays(1), Price = 105.0 }
-};
-var stockTimeSeries = stocks.ToTimeSeries(s => s.Date, s => s.Price);
-```
-
-### Distribution Analysis
-
-```csharp
-// Descriptive statistics
 var testScores = new[] { 65.0, 70.0, 75.0, 80.0, 85.0, 90.0, 95.0, 72.0, 88.0, 78.0 };
 
 // Central tendency
@@ -265,9 +172,75 @@ var salaryIQR = employees.InterquartileRange(e => e.Salary);
 var salaryRange = employees.Range(e => e.Salary);
 ```
 
-### Linear Algebra
+#### Rolling Windows
 
 ```csharp
+using Mavusi.Linq.DataScience;
+
+var data = new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 };
+
+// Create rolling windows
+var windows = data.RollingWindow(3);
+// Results: [1,2,3], [2,3,4], [3,4,5], [4,5,6]
+
+// Moving average
+var movingAvg = data.RollingAverage(3);
+
+// Rolling sum
+var rollingSum = data.RollingSum(3);
+
+// Custom aggregation
+var rollingMax = data.RollingAggregate(3, w => w.Max());
+
+// Windows with custom step
+var steppedWindows = data.RollingWindow(3, step: 2);
+// Results: [1,2,3], [3,4,5]
+```
+
+#### Time-Series Analysis
+
+```csharp
+using Mavusi.Linq.DataScience;
+using Mavusi.Linq.DataScience.Models;
+
+// Create time-series data
+var timeSeries = new[]
+{
+    new TimeSeriesPoint<double>(DateTime.Today, 100.0),
+    new TimeSeriesPoint<double>(DateTime.Today.AddDays(1), 105.0),
+    new TimeSeriesPoint<double>(DateTime.Today.AddDays(2), 103.0)
+};
+
+// Calculate percentage change
+var changes = timeSeries.PercentageChange();
+
+// Resample to different interval
+var hourlyData = timeSeries.Resample(TimeSpan.FromHours(1), values => values.Average());
+
+// Moving average
+var ma = timeSeries.MovingAverage(3);
+
+// Exponential moving average
+var ema = timeSeries.ExponentialMovingAverage(alpha: 0.3);
+
+// Fill gaps in data
+var filled = timeSeries.FillGaps(TimeSpan.FromDays(1), fillValue: 0.0);
+
+// Convert from existing data
+var stocks = new[]
+{
+    new { Date = DateTime.Today, Price = 100.0 },
+    new { Date = DateTime.Today.AddDays(1), Price = 105.0 }
+};
+var stockTimeSeries = stocks.ToTimeSeries(s => s.Date, s => s.Price);
+```
+
+#### Linear Algebra
+
+```csharp
+using Mavusi.Linq.DataScience;
+using Mavusi.Linq.DataScience.Models;
+
 // Vector operations
 var v1 = new[] { 1.0, 2.0, 3.0 }.ToVector();
 var v2 = new[] { 4.0, 5.0, 6.0 }.ToVector();
@@ -304,9 +277,12 @@ var result = matrix1.Multiply(vector);
 var identity = LinearAlgebraExtensions.CreateIdentityMatrix(3);
 ```
 
-### Geospatial Analysis
+#### Geospatial Analysis
 
 ```csharp
+using Mavusi.Linq.DataScience;
+using Mavusi.Linq.DataScience.Models;
+
 // Define coordinates
 var newYork = new GeoCoordinate(40.7128, -74.0060);
 var losAngeles = new GeoCoordinate(34.0522, -118.2437);
@@ -365,42 +341,105 @@ var stores = new[]
 var clusters = stores.GroupByProximity(s => s.Location, thresholdKm: 10).ToList();
 ```
 
-## Requirements
+### GPU-Accelerated Methods (Optional GpuBound Package)
 
-- .NET 8.0 or higher
-- C# 10.0 or higher (for record types and init properties)
-- **GPU acceleration requires ILGPU-compatible hardware** (CUDA, OpenCL, or CPU fallback)
-  - NVIDIA GPUs (CUDA)
-  - AMD GPUs (OpenCL)
-  - Intel GPUs (OpenCL)
-  - CPU fallback available on all platforms
+For massive performance gains on large datasets, install the **Mavusi.Linq.DataScience.GpuBound** package and use GPU-accelerated versions:
 
-## Performance
+```csharp
+using Mavusi.Linq.DataScience.GpuBound;
 
-GPU-accelerated methods provide significant performance improvements for large datasets:
+// Large dataset (1M+ elements)
+var largeDataset = Enumerable.Range(0, 1000000).Select(i => (double)i).ToArray();
+var y = Enumerable.Range(0, 1000000).Select(i => (double)i * 2 + 5).ToArray();
+
+// GPU-accelerated correlation (up to 100x faster!)
+var correlation = largeDataset.CorrelationGpu(y);
+
+// GPU-accelerated standard deviation
+var stdDev = largeDataset.StandardDeviationGpu();
+
+// GPU-accelerated rolling average
+var rollingAvg = largeDataset.RollingAverageGpu(windowSize: 100);
+
+// GPU-accelerated linear algebra
+var v1 = new[] { 1.0, 2.0, 3.0 }.ToVector();
+var v2 = new[] { 4.0, 5.0, 6.0 }.ToVector();
+var dotProduct = v1.DotProductGpu(v2);
+
+// GPU-accelerated geospatial calculations
+var locations = GetThousandsOfLocations();
+var center = new GeoCoordinate(40.0, -75.0);
+var distances = locations.CalculateDistancesGpu(l => l.Coordinate, center);
+```
+
+**Performance Tips:**
+- GPU acceleration provides the most benefit with datasets of 10,000+ elements
+- For smaller datasets (<1,000 elements), CPU methods are faster due to GPU initialization overhead
+- GPU methods automatically detect and use available hardware (CUDA, OpenCL, or CPU fallback)
+- All GPU methods are fully tested and produce identical results to CPU versions
+
+For full GPU documentation and examples, see the [GPU package README](./Mavusi.Linq.DataScience.GpuBound/README.md).
+
+## 🏗️ Architecture
+
+The library is split into two packages:
+
+| Package | Purpose | Dependencies | Best For |
+|---------|---------|--------------|----------|
+| **Mavusi.Linq.DataScience** | CPU-optimized core library | None | Small-medium datasets, general use |
+| **Mavusi.Linq.DataScience.GpuBound** | GPU-accelerated extensions | ILGPU | Large datasets (10K+), batch processing |
+
+This separation allows you to:
+- ✅ Use the core library without ILGPU dependencies
+- ✅ Add GPU acceleration only when needed
+- ✅ Keep your application lightweight
+- ✅ Deploy to environments without GPU support
+
+## 📋 Requirements
+
+### Core Package
+- .NET 8.0, 9.0, or 10.0
+- No external dependencies
+
+### GPU Package (Optional)
+- .NET 8.0, 9.0, or 10.0
+- ILGPU 1.5.3+
+- GPU hardware recommended (CUDA/OpenCL) but not required (CPU fallback available)
+
+## 📊 Performance Comparison
 
 | Dataset Size | CPU Time | GPU Time | Speedup |
 |-------------|----------|----------|---------|
-| 1,000       | ~1ms     | ~2ms     | 0.5x    |
-| 10,000      | ~10ms    | ~3ms     | 3.3x    |
-| 100,000     | ~100ms   | ~5ms     | 20x     |
-| 1,000,000   | ~1000ms  | ~15ms    | 66x     |
+| 1,000       | ~1ms     | ~2ms     | 0.5x (CPU better) |
+| 10,000      | ~10ms    | ~3ms     | 3.3x |
+| 100,000     | ~100ms   | ~5ms     | 20x |
+| 1,000,000   | ~1,000ms | ~15ms    | 66x |
 
-*Benchmarks performed on NVIDIA RTX 3080. Actual performance varies by hardware.*
+*Benchmarks performed on NVIDIA RTX 3080. Use CPU methods for small datasets, GPU methods for large datasets.*
 
-## Architecture
+## 🧪 Testing
 
-The library is organized into two main namespaces:
+Both packages are extensively tested with 285+ comprehensive tests ensuring:
+- ✅ Correct statistical calculations
+- ✅ Edge case handling
+- ✅ Identical results between CPU and GPU versions
+- ✅ Hardware compatibility
 
-- **`Mavusi.Linq.DataScience`**: CPU-based implementations, optimized for small to medium datasets
-- **`Mavusi.Linq.DataScience.GpuBound`**: GPU-accelerated implementations using ILGPU, optimized for large datasets
+## 📚 Additional Resources
 
-All GPU methods are suffixed with `Gpu` (e.g., `CorrelationGpu()`, `StandardDeviationGpu()`) and can be used as drop-in replacements for their CPU counterparts.
+- [GPU Package Documentation](./Mavusi.Linq.DataScience.GpuBound/README.md)
+- [GitHub Repository](https://github.com/mavusi/Mavusi.Linq.DataScience)
+- [NuGet Package - Core](https://www.nuget.org/packages/Mavusi.Linq.DataScience)
+- [NuGet Package - GPU](https://www.nuget.org/packages/Mavusi.Linq.DataScience.GpuBound)
 
-## License
+## 🤝 Contributing
 
-This is a personal project. Please adjust the license according to your needs.
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-## Contributing
+## 📄 License
 
-Contributions are welcome! Feel free to submit issues or pull requests.
+MIT License - see [LICENSE](LICENSE) for details.
+
+## 🙏 Acknowledgments
+
+GPU acceleration powered by [ILGPU](https://github.com/m4rs-mt/ILGPU).

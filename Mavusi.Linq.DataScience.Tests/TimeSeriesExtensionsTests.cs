@@ -1,3 +1,5 @@
+using Mavusi.Linq.DataScience.Models;
+
 namespace Mavusi.Linq.DataScience.Tests;
 
 public class TimeSeriesExtensionsTests

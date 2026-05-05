@@ -1,4 +1,5 @@
 using Mavusi.Linq.DataScience.GpuBound;
+using Mavusi.Linq.DataScience.Models;
 
 namespace Mavusi.Linq.DataScience.Tests.GpuBound;
 

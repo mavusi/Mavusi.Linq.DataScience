@@ -1,4 +1,6 @@
 <Solution>
+  <Project Path="Mavusi.Linq.DataScience.GpuBound/Mavusi.Linq.DataScience.GpuBound.csproj" Id="ba72b541-0180-4a44-96b9-a43fae0fabcf" />
+  <Project Path="Mavusi.Linq.DataScience.Models/Mavusi.Linq.DataScience.Models.csproj" Id="1e845d69-52fc-428b-aa26-8cb4107ffe34" />
   <Project Path="Mavusi.Linq.DataScience.Tests/Mavusi.Linq.DataScience.Tests.csproj" />
   <Project Path="Mavusi.Linq.DataScience/Mavusi.Linq.DataScience.csproj" />
 </Solution>

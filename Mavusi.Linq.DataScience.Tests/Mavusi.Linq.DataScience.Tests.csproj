@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Mavusi.Linq.DataScience\Mavusi.Linq.DataScience.csproj" />
+    <ProjectReference Include="..\Mavusi.Linq.DataScience.GpuBound\Mavusi.Linq.DataScience.GpuBound.csproj" />
   </ItemGroup>
 
 </Project>

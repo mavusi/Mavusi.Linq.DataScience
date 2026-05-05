@@ -1,7 +1,9 @@
 using ILGPU;
 using ILGPU.Runtime;
+using Mavusi.Linq.DataScience.Models;
 
 namespace Mavusi.Linq.DataScience.GpuBound;
+
 
 /// <summary>
 /// GPU-accelerated geospatial operations using ILGPU.

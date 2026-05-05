@@ -1,0 +1,45 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+
+    <!-- NuGet Package Metadata -->
+    <PackageId>Mavusi.Linq.DataScience.GpuBound</PackageId>
+    <Version>3.0.0</Version>
+    <Authors>Mavusi</Authors>
+    <Company>Mavusi</Company>
+    <Description>GPU-accelerated data science extensions for .NET using ILGPU. This companion package to Mavusi.Linq.DataScience provides massive performance gains (up to 100x) on large datasets by leveraging GPU parallel processing. Includes GPU-accelerated versions of: correlation, covariance, standard deviation, variance, distribution analysis (median, quartiles, percentiles, skewness, kurtosis), rolling windows, time-series operations, linear algebra (dot product, matrix multiplication, vector operations), and geospatial calculations (Haversine distance, radius filtering, nearest neighbor). All GPU methods are suffixed with 'Gpu' and automatically handle hardware compatibility with CUDA, OpenCL, or CPU fallback. Fully tested with 285+ comprehensive tests ensuring identical results to CPU versions.</Description>
+    <PackageTags>gpu;cuda;opencl;ilgpu;parallel;high-performance;acceleration;hpc;data-science;statistics;correlation;linear-algebra;machine-learning;analytics;math;median;quartiles;distribution;geospatial;time-series;rolling-windows;linq</PackageTags>
+    <PackageProjectUrl>https://github.com/mavusi/Mavusi.Linq.DataScience</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/mavusi/Mavusi.Linq.DataScience</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReleaseNotes>Version 3.0.0: Separated GPU-accelerated extensions into dedicated package. Requires only ILGPU dependencies for GPU-bound calculations. Multi-targets .NET 8, 9, and 10. All GPU methods provide up to 100x performance improvement on large datasets while maintaining full compatibility with CPU fallback. Install this package alongside Mavusi.Linq.DataScience to access GPU-accelerated methods.</PackageReleaseNotes>
+    <Copyright>Copyright (c) 2025 Mavusi</Copyright>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ILGPU" Version="1.5.3" />
+    <PackageReference Include="ILGPU.Algorithms" Version="1.5.3" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mavusi.Linq.DataScience.Models\Mavusi.Linq.DataScience.Models.csproj" />
+  </ItemGroup>
+
+</Project>

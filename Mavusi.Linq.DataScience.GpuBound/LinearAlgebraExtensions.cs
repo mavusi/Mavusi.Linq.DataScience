@@ -1,5 +1,6 @@
 using ILGPU;
 using ILGPU.Runtime;
+using Mavusi.Linq.DataScience.Models;
 
 namespace Mavusi.Linq.DataScience.GpuBound;
 
@@ -8,6 +9,14 @@ namespace Mavusi.Linq.DataScience.GpuBound;
 /// </summary>
 public static class LinearAlgebraExtensions
 {
+    /// <summary>
+    /// Creates a vector from a sequence of values.
+    /// </summary>
+    public static Vector ToVector(this IEnumerable<double> source)
+    {
+        if (source == null) throw new ArgumentNullException(nameof(source));
+        return new Vector(source);
+    }
     private static (Context Context, Accelerator Accelerator) GpuContext => 
         CorrelationExtensions.GpuContext;
 
