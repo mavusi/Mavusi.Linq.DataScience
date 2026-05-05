@@ -1,14 +1,6 @@
+using Mavusi.Linq.DataScience.Models;
+
 namespace Mavusi.Linq.DataScience;
-
-/// <summary>
-/// Represents a geographical coordinate with latitude and longitude.
-/// </summary>
-public record GeoCoordinate(double Latitude, double Longitude);
-
-/// <summary>
-/// Represents a result from a distance calculation between two points.
-/// </summary>
-public record GeoDistance(GeoCoordinate From, GeoCoordinate To, double DistanceKm, double DistanceMiles);
 
 /// <summary>
 /// Represents a geographical bounding box.
