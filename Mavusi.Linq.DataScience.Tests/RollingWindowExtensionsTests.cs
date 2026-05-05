@@ -82,8 +82,20 @@ public class RollingWindowExtensionsTests
             new { Day = 4, Amount = 200.0 }
         };
 
-        // Act
+        // With Mavusi.Linq.DataScience.Extensions.RollingWindowExtensions.RollingAverage method
         var movingAvg = sales.RollingAverage(2, s => s.Amount).ToList();
+
+        //without
+        var manualMovingAvg = sales
+            .Select((s, i) => new
+            {
+                s.Day,
+                s.Amount,
+                RollingAvg = i >= 1 ? (sales[i - 1].Amount + s.Amount) / 2 : (double?)null
+            })
+            .Where(x => x.RollingAvg.HasValue)
+            .Select(x => x.RollingAvg.Value)
+            .ToList();
 
         // Assert
         Assert.Equal(3, movingAvg.Count);

@@ -9,6 +9,18 @@ A comprehensive .NET library that extends LINQ to Objects with powerful statisti
 - **Variance**: Calculate population and sample variance
 - Support for both direct values and selector functions
 
+### 📈 Distribution Extensions
+- **Median**: Calculate the median (50th percentile) of a dataset
+- **Mode**: Find the most frequently occurring value
+- **Quartiles**: Calculate Q1, Q2 (median), and Q3
+- **Percentiles**: Calculate any percentile (0-100) with linear interpolation
+- **Interquartile Range (IQR)**: Measure statistical dispersion
+- **Skewness**: Measure distribution asymmetry (left/right skewed)
+- **Kurtosis**: Measure distribution tail heaviness
+- **Range**: Calculate the difference between max and min
+- **Mean Absolute Deviation (MAD)**: Alternative measure of variability
+- Support for both direct values and selector functions
+
 ### 🔗 Correlation Extensions
 - **Pearson Correlation**: Measure linear correlation between two datasets
 - **Covariance**: Calculate covariance between sequences
@@ -139,6 +151,45 @@ var stocks = new[]
     new { Date = DateTime.Today.AddDays(1), Price = 105.0 }
 };
 var stockTimeSeries = stocks.ToTimeSeries(s => s.Date, s => s.Price);
+```
+
+### Distribution Analysis
+
+```csharp
+// Descriptive statistics
+var testScores = new[] { 65.0, 70.0, 75.0, 80.0, 85.0, 90.0, 95.0, 72.0, 88.0, 78.0 };
+
+// Central tendency
+var mean = testScores.Average();
+var median = testScores.Median();
+var mode = new[] { 1, 2, 2, 3, 3, 3, 4 }.Mode(); // Returns 3
+
+// Percentiles and quartiles
+var p90 = testScores.Percentile(90);  // 90th percentile
+var q1 = testScores.Quartile(1);      // 25th percentile (Q1)
+var q2 = testScores.Quartile(2);      // 50th percentile (median)
+var q3 = testScores.Quartile(3);      // 75th percentile (Q3)
+var iqr = testScores.InterquartileRange(); // Q3 - Q1
+
+// Distribution shape
+var skewness = testScores.Skewness();   // Measure of asymmetry
+var kurtosis = testScores.Kurtosis();   // Measure of tail heaviness
+
+// Dispersion measures
+var range = testScores.Range();         // Max - Min
+var mad = testScores.MeanAbsoluteDeviation(); // Average absolute deviation
+
+// Using selectors
+var employees = new[]
+{
+    new { Name = "Alice", Salary = 50000.0 },
+    new { Name = "Bob", Salary = 60000.0 },
+    new { Name = "Charlie", Salary = 55000.0 }
+};
+
+var medianSalary = employees.Median(e => e.Salary);
+var salaryIQR = employees.InterquartileRange(e => e.Salary);
+var salaryRange = employees.Range(e => e.Salary);
 ```
 
 ### Linear Algebra

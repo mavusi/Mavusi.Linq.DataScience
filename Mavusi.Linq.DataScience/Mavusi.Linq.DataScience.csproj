@@ -8,17 +8,17 @@
 
     <!-- NuGet Package Metadata -->
     <PackageId>Mavusi.Linq.DataScience</PackageId>
-    <Version>1.0.0</Version>
+    <Version>1.5.0</Version>
     <Authors>Mavusi</Authors>
     <Company>Mavusi</Company>
-    <Description>A comprehensive .NET library that extends LINQ to Objects with powerful statistical and data science features including standard deviation, correlation, rolling windows, time-series analysis, and linear algebra operations.</Description>
-    <PackageTags>linq;data-science;statistics;correlation;time-series;rolling-windows;linear-algebra;machine-learning;analytics;math</PackageTags>
+    <Description>A comprehensive .NET library that extends LINQ to Objects with powerful statistical and data science features including distribution analysis (median, quartiles, percentiles, skewness, kurtosis), standard deviation, correlation, rolling windows, time-series analysis, and linear algebra operations.</Description>
+    <PackageTags>linq;data-science;statistics;correlation;time-series;rolling-windows;linear-algebra;machine-learning;analytics;math;median;quartiles;percentiles;distribution;skewness;kurtosis</PackageTags>
     <PackageProjectUrl>https://github.com/mavusi/Mavusi.Linq.DataScience</PackageProjectUrl>
     <RepositoryUrl>https://github.com/mavusi/Mavusi.Linq.DataScience</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Initial release with statistical extensions, correlation analysis, rolling windows, time-series operations, and linear algebra support.</PackageReleaseNotes>
+    <PackageReleaseNotes>Version 1.5.0: Added comprehensive Distribution Extensions including Median, Mode, Quartiles (Q1/Q2/Q3), Percentiles, Interquartile Range (IQR), Skewness, Kurtosis, Range, and Mean Absolute Deviation (MAD). All methods support selector functions for easy use with custom objects. Includes 39 new tests with 100% coverage.</PackageReleaseNotes>
     <Copyright>Copyright (c) 2025 Mavusi</Copyright>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
