@@ -33,6 +33,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="ILGPU" Version="1.5.3" />
+    <PackageReference Include="ILGPU.Algorithms" Version="1.5.3" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
   </ItemGroup>
 
