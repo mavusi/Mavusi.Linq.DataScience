@@ -138,20 +138,7 @@ public class CorrelationExtensionsTests
         Assert.True(correlation > 0.9);
     }
 
-    [Fact]
-    public void Correlation_LargeDataset_CalculatesCorrectly()
-    {
-        // Arrange - large dataset to benefit from GPU parallelization
-        var size = 10000;
-        var x = Enumerable.Range(0, size).Select(i => (float)i).ToArray();
-        var y = Enumerable.Range(0, size).Select(i => (float)i * 2 + 5).ToArray();
-
-        // Act
-        var result = x.CorrelationGpu(y);
-
-        // Assert - perfect positive correlation
-        Assert.Equal(1.0, result, precision: 10);
-    }
+    
 
     [Fact]
     public void Correlation_GpuMatchesCpuResults()

@@ -16,7 +16,7 @@ public static class CorrelationExtensions
     /// Returns a value between -1 and 1, where 1 is perfect positive correlation,
     /// -1 is perfect negative correlation, and 0 is no correlation.
     /// </summary>
-    public static float CorrelationGpu(this IEnumerable<double> sourceX, IEnumerable<double> sourceY)
+    public static float CorrelationGpu(this IEnumerable<float> sourceX, IEnumerable<float> sourceY)
     {
         if (sourceX == null) throw new ArgumentNullException(nameof(sourceX));
         if (sourceY == null) throw new ArgumentNullException(nameof(sourceY));
@@ -30,24 +30,20 @@ public static class CorrelationExtensions
 
         var (context, accelerator) = GpuContext;
 
-        // Calculate means
-        var meanX = CalculateMeanGpu(accelerator, x);
-        var meanY = CalculateMeanGpu(accelerator, y);
-
-        // Calculate covariance and standard deviations
-        var (covariance, stdX, stdY) = CalculateCorrelationComponentsGpu(accelerator, x, y, meanX, meanY);
+        // Calculate mean and correlation components in a single pass
+        var (meanX, meanY, covariance, stdX, stdY) = CalculateCorrelationGpu(accelerator, x, y);
 
         if (stdX == 0 || stdY == 0) return 0;
 
-        return (float)(covariance / (stdX * stdY));
+        return covariance / (stdX * stdY);
     }
 
     /// <summary>
     /// Calculates the Pearson correlation coefficient between two sequences using selectors and GPU acceleration.
     /// </summary>
     public static float CorrelationGpu<T>(this IEnumerable<T> source,
-        Func<T, double> selectorX,
-        Func<T, double> selectorY)
+        Func<T, float> selectorX,
+        Func<T, float> selectorY)
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
         if (selectorX == null) throw new ArgumentNullException(nameof(selectorX));
@@ -63,7 +59,7 @@ public static class CorrelationExtensions
     /// <summary>
     /// Calculates the covariance between two sequences using GPU acceleration.
     /// </summary>
-    public static float CovarianceGpu(this IEnumerable<double> sourceX, IEnumerable<double> sourceY)
+    public static float CovarianceGpu(this IEnumerable<float> sourceX, IEnumerable<float> sourceY)
     {
         if (sourceX == null) throw new ArgumentNullException(nameof(sourceX));
         if (sourceY == null) throw new ArgumentNullException(nameof(sourceY));
@@ -77,20 +73,17 @@ public static class CorrelationExtensions
 
         var (context, accelerator) = GpuContext;
 
-        var meanX = CalculateMeanGpu(accelerator, x);
-        var meanY = CalculateMeanGpu(accelerator, y);
+        var covariance = CalculateCovarianceGpu(accelerator, x, y);
 
-        var covariance = CalculateCovarianceGpu(accelerator, x, y, meanX, meanY);
-
-        return (float)(covariance / x.Length);
+        return covariance / x.Length;
     }
 
     /// <summary>
     /// Calculates the covariance between two sequences using selectors and GPU acceleration.
     /// </summary>
     public static float CovarianceGpu<T>(this IEnumerable<T> source,
-        Func<T, double> selectorX,
-        Func<T, double> selectorY)
+        Func<T, float> selectorX,
+        Func<T, float> selectorY)
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
         if (selectorX == null) throw new ArgumentNullException(nameof(selectorX));
@@ -103,134 +96,134 @@ public static class CorrelationExtensions
         return x.CovarianceGpu(y);
     }
 
-    private static double CalculateMeanGpu(Accelerator accelerator, double[] data)
+    private static (float meanX, float meanY, float covariance, float stdX, float stdY) CalculateCorrelationGpu(
+        Accelerator accelerator, float[] x, float[] y)
     {
-        var floatData = data.Select(d => (float)d).ToArray();
-        using var deviceData = accelerator.Allocate1D(floatData);
-        using var deviceResult = accelerator.Allocate1D<float>(1);
+        using var deviceX = accelerator.Allocate1D(x);
+        using var deviceY = accelerator.Allocate1D(y);
+        using var deviceResults = accelerator.Allocate1D<float>(5);
 
-        // Initialize result to zero
-        deviceResult.MemSetToZero();
-
-        var sumKernel = accelerator.LoadAutoGroupedStreamKernel<
-            Index1D, ArrayView<float>, ArrayView<float>>(SumKernel);
-
-        sumKernel(floatData.Length, deviceData.View, deviceResult.View);
-        accelerator.Synchronize();
-
-        var sum = deviceResult.GetAsArray1D()[0];
-        return sum / floatData.Length;
-    }
-
-    private static (double covariance, double stdX, double stdY) CalculateCorrelationComponentsGpu(
-        Accelerator accelerator, double[] x, double[] y, double meanX, double meanY)
-    {
-        var floatX = x.Select(d => (float)d).ToArray();
-        var floatY = y.Select(d => (float)d).ToArray();
-
-        using var deviceX = accelerator.Allocate1D(floatX);
-        using var deviceY = accelerator.Allocate1D(floatY);
-        using var deviceResults = accelerator.Allocate1D<float>(3);
-
-        // Initialize results to zero
         deviceResults.MemSetToZero();
 
-        var correlationKernel = accelerator.LoadAutoGroupedStreamKernel<
-            Index1D, ArrayView<float>, ArrayView<float>, float, float, ArrayView<float>>(
-            CorrelationComponentsKernel);
+        var kernel = accelerator.LoadAutoGroupedStreamKernel<
+            Index1D, ArrayView<float>, ArrayView<float>, int, ArrayView<float>>(
+            CorrelationAllInOneKernel);
 
-        correlationKernel(floatX.Length, deviceX.View, deviceY.View, (float)meanX, (float)meanY, deviceResults.View);
+        kernel(x.Length, deviceX.View, deviceY.View, x.Length, deviceResults.View);
         accelerator.Synchronize();
 
         var results = deviceResults.GetAsArray1D();
-        var covariance = results[0];
-        var stdX = Math.Sqrt(results[1]);
-        var stdY = Math.Sqrt(results[2]);
+        var n = x.Length;
+        var sumX = results[0];
+        var sumY = results[1];
+        var sumXY = results[2];
+        var sumX2 = results[3];
+        var sumY2 = results[4];
 
-        return (covariance, stdX, stdY);
+        var meanX = sumX / n;
+        var meanY = sumY / n;
+
+        // Computational formula: cov(X,Y) = E[XY] - E[X]E[Y]
+        var covariance = (sumXY / n) - (meanX * meanY);
+
+        // Computational formula: var(X) = E[X²] - E[X]²
+        var varianceX = (sumX2 / n) - (meanX * meanX);
+        var varianceY = (sumY2 / n) - (meanY * meanY);
+
+        var stdX = MathF.Sqrt(varianceX);
+        var stdY = MathF.Sqrt(varianceY);
+
+        return (meanX, meanY, covariance, stdX, stdY);
     }
 
-    private static double CalculateCovarianceGpu(
-        Accelerator accelerator, double[] x, double[] y, double meanX, double meanY)
+    private static float CalculateCovarianceGpu(Accelerator accelerator, float[] x, float[] y)
     {
-        var floatX = x.Select(d => (float)d).ToArray();
-        var floatY = y.Select(d => (float)d).ToArray();
+        using var deviceX = accelerator.Allocate1D(x);
+        using var deviceY = accelerator.Allocate1D(y);
+        using var deviceResults = accelerator.Allocate1D<float>(3);
 
-        using var deviceX = accelerator.Allocate1D(floatX);
-        using var deviceY = accelerator.Allocate1D(floatY);
-        using var deviceResult = accelerator.Allocate1D<float>(1);
+        deviceResults.MemSetToZero();
 
-        // Initialize result to zero
-        deviceResult.MemSetToZero();
+        var kernel = accelerator.LoadAutoGroupedStreamKernel<
+            Index1D, ArrayView<float>, ArrayView<float>, int, ArrayView<float>>(
+            CovarianceAllInOneKernel);
 
-        var covarianceKernel = accelerator.LoadAutoGroupedStreamKernel<
-            Index1D, ArrayView<float>, ArrayView<float>, float, float, ArrayView<float>>(
-            CovarianceKernel);
-
-        covarianceKernel(floatX.Length, deviceX.View, deviceY.View, (float)meanX, (float)meanY, deviceResult.View);
+        kernel(x.Length, deviceX.View, deviceY.View, x.Length, deviceResults.View);
         accelerator.Synchronize();
 
-        return deviceResult.GetAsArray1D()[0];
+        var results = deviceResults.GetAsArray1D();
+        var n = x.Length;
+        var sumX = results[0];
+        var sumY = results[1];
+        var sumXY = results[2];
+
+        var meanX = sumX / n;
+        var meanY = sumY / n;
+
+        // Computational formula: cov(X,Y) = E[XY] - E[X]E[Y]
+        var covariance = (sumXY / n) - (meanX * meanY);
+
+        return covariance * n;
     }
 
-    // GPU Kernel: Sum all elements
-    private static void SumKernel(Index1D index, ArrayView<float> input, ArrayView<float> output)
-    {
-        var sum = 0.0f;
-        for (int i = index; i < input.Length; i += Grid.DimX * Group.DimX)
-        {
-            sum += input[i];
-        }
-        Atomic.Add(ref output[0], sum);
-    }
-
-    // GPU Kernel: Calculate covariance and variance components
-    private static void CorrelationComponentsKernel(
+    // GPU Kernel: Calculate everything in one pass (mean + correlation components)
+    private static void CorrelationAllInOneKernel(
         Index1D index,
         ArrayView<float> x,
         ArrayView<float> y,
-        float meanX,
-        float meanY,
+        int n,
         ArrayView<float> results)
     {
-        var covariance = 0.0f;
-        var varianceX = 0.0f;
-        var varianceY = 0.0f;
+        var sumX = 0.0f;
+        var sumY = 0.0f;
+        var sumXY = 0.0f;
+        var sumX2 = 0.0f;
+        var sumY2 = 0.0f;
 
-        for (int i = index; i < x.Length; i += Grid.DimX * Group.DimX)
+        for (int i = index; i < n; i += Grid.DimX * Group.DimX)
         {
-            var diffX = x[i] - meanX;
-            var diffY = y[i] - meanY;
+            var xVal = x[i];
+            var yVal = y[i];
 
-            covariance += diffX * diffY;
-            varianceX += diffX * diffX;
-            varianceY += diffY * diffY;
+            sumX += xVal;
+            sumY += yVal;
+            sumXY += xVal * yVal;
+            sumX2 += xVal * xVal;
+            sumY2 += yVal * yVal;
         }
 
-        Atomic.Add(ref results[0], covariance);
-        Atomic.Add(ref results[1], varianceX);
-        Atomic.Add(ref results[2], varianceY);
+        Atomic.Add(ref results[0], sumX);
+        Atomic.Add(ref results[1], sumY);
+        Atomic.Add(ref results[2], sumXY);
+        Atomic.Add(ref results[3], sumX2);
+        Atomic.Add(ref results[4], sumY2);
     }
 
-    // GPU Kernel: Calculate covariance
-    private static void CovarianceKernel(
+    // GPU Kernel: Calculate covariance components in one pass
+    private static void CovarianceAllInOneKernel(
         Index1D index,
         ArrayView<float> x,
         ArrayView<float> y,
-        float meanX,
-        float meanY,
-        ArrayView<float> result)
+        int n,
+        ArrayView<float> results)
     {
-        var covariance = 0.0f;
+        var sumX = 0.0f;
+        var sumY = 0.0f;
+        var sumXY = 0.0f;
 
-        for (int i = index; i < x.Length; i += Grid.DimX * Group.DimX)
+        for (int i = index; i < n; i += Grid.DimX * Group.DimX)
         {
-            var diffX = x[i] - meanX;
-            var diffY = y[i] - meanY;
-            covariance += diffX * diffY;
+            var xVal = x[i];
+            var yVal = y[i];
+
+            sumX += xVal;
+            sumY += yVal;
+            sumXY += xVal * yVal;
         }
 
-        Atomic.Add(ref result[0], covariance);
+        Atomic.Add(ref results[0], sumX);
+        Atomic.Add(ref results[1], sumY);
+        Atomic.Add(ref results[2], sumXY);
     }
 
     /// <summary>

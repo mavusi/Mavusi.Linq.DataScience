@@ -1,4 +1,5 @@
 using ILGPU;
+using ILGPU.Algorithms;
 using ILGPU.Runtime;
 
 namespace Mavusi.Linq.DataScience.GpuBound;
@@ -66,7 +67,7 @@ public static class RollingWindowExtensions
         var values = source.Select(v => (float)v).ToArray();
         if (values.Length < windowSize) yield break;
 
-        var (context, accelerator) = GpuContext;
+        var accelerator = GpuContext.Accelerator;
         var resultCount = values.Length - windowSize + 1;
         var results = new float[resultCount];
 
@@ -110,7 +111,7 @@ public static class RollingWindowExtensions
         var values = source.Select(v => (float)v).ToArray();
         if (values.Length < windowSize) yield break;
 
-        var (context, accelerator) = GpuContext;
+        var accelerator = GpuContext.Accelerator;
         var resultCount = values.Length - windowSize + 1;
         var results = new float[resultCount];
 
@@ -134,7 +135,7 @@ public static class RollingWindowExtensions
     /// <summary>
     /// Calculates a rolling maximum with a specified window size using GPU acceleration.
     /// </summary>
-    public static IEnumerable<float> RollingMaxGpu(this IEnumerable<float> source, int windowSize)
+    public static IEnumerable<float> RollingMaxGpu(this IEnumerable<double> source, int windowSize)
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
         if (windowSize <= 0) throw new ArgumentException("Window size must be greater than zero", nameof(windowSize));
@@ -142,7 +143,7 @@ public static class RollingWindowExtensions
         var values = source.Select(v => (float)v).ToArray();
         if (values.Length < windowSize) yield break;
 
-        var (context, accelerator) = GpuContext;
+        var accelerator = GpuContext.Accelerator;
         var resultCount = values.Length - windowSize + 1;
         var results = new float[resultCount];
 
@@ -174,7 +175,7 @@ public static class RollingWindowExtensions
         var values = source.ToArray();
         if (values.Length < windowSize) yield break;
 
-        var (context, accelerator) = GpuContext;
+        var accelerator = GpuContext.Accelerator;
         var resultCount = values.Length - windowSize + 1;
         var results = new float[resultCount];
 
@@ -210,7 +211,8 @@ public static class RollingWindowExtensions
             {
                 sum += input[index + i];
             }
-            output[index] = sum / windowSize;
+            float invWindowSize = 1.0f / windowSize;
+            output[index] = sum * invWindowSize;
         }
     }
 
@@ -242,8 +244,7 @@ public static class RollingWindowExtensions
             float min = input[index];
             for (int i = 1; i < windowSize; i++)
             {
-                var value = input[index + i];
-                if (value < min) min = value;
+                min = XMath.Min(min, input[index + i]);
             }
             output[index] = min;
         }
@@ -260,8 +261,7 @@ public static class RollingWindowExtensions
             float max = input[index];
             for (int i = 1; i < windowSize; i++)
             {
-                var value = input[index + i];
-                if (value > max) max = value;
+                max = XMath.Max(max, input[index + i]);
             }
             output[index] = max;
         }
@@ -275,13 +275,15 @@ public static class RollingWindowExtensions
     {
         if (index < output.Length)
         {
+            float invWindowSize = 1.0f / windowSize;
+
             // Calculate mean
             float sum = 0;
             for (int i = 0; i < windowSize; i++)
             {
                 sum += input[index + i];
             }
-            float mean = sum / windowSize;
+            float mean = sum * invWindowSize;
 
             // Calculate variance
             float sumSquares = 0;
@@ -291,7 +293,7 @@ public static class RollingWindowExtensions
                 sumSquares += diff * diff;
             }
 
-            output[index] = (float)Math.Sqrt(sumSquares / windowSize);
+            output[index] = XMath.Sqrt(sumSquares * invWindowSize);
         }
     }
 }

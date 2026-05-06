@@ -1,14 +1,37 @@
 using ILGPU;
 using ILGPU.Runtime;
 using Mavusi.Linq.DataScience.Models;
+using System.Buffers;
 
 namespace Mavusi.Linq.DataScience.GpuBound;
 
 /// <summary>
-/// GPU-accelerated linear algebra operations using ILGPU.
+/// GPU-accelerated linear algebra operations using ILGPU with optimized 32-bit precision.
 /// </summary>
 public static class LinearAlgebraExtensions
 {
+    private static (Context Context, Accelerator Accelerator) GpuContext => 
+        GpuContextBase.FastGpuContext;
+
+    // Cached kernel delegates for optimal performance
+    private static readonly Lazy<Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>> _dotKernel =
+        new(() => GpuContext.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(DotProductKernel));
+
+    private static readonly Lazy<Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>> _addKernel =
+        new(() => GpuContext.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(AddKernel));
+
+    private static readonly Lazy<Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>> _subtractKernel =
+        new(() => GpuContext.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(SubtractKernel));
+
+    private static readonly Lazy<Action<Index1D, ArrayView<float>, float, ArrayView<float>>> _scalarMultKernel =
+        new(() => GpuContext.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, float, ArrayView<float>>(ScalarMultiplyKernel));
+
+    private static readonly Lazy<Action<Index1D, ArrayView<float>, ArrayView<float>>> _magnitudeKernel =
+        new(() => GpuContext.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>>(MagnitudeKernel));
+
+    private static readonly Lazy<Action<Index1D, ArrayView<float>, ArrayView<float>, int, int, int, ArrayView<float>>> _matrixMultKernel =
+        new(() => GpuContext.Accelerator.LoadAutoGroupedStreamKernel<Index1D, ArrayView<float>, ArrayView<float>, int, int, int, ArrayView<float>>(MatrixMultiplyKernel));
+
     /// <summary>
     /// Creates a vector from a sequence of values.
     /// </summary>
@@ -17,8 +40,14 @@ public static class LinearAlgebraExtensions
         if (source == null) throw new ArgumentNullException(nameof(source));
         return new Vector(source);
     }
-    private static (Context Context, Accelerator Accelerator) GpuContext => 
-        GpuContextBase.GpuContext;
+
+    private static float[] ConvertToFloatArray(Vector vector)
+    {
+        var array = new float[vector.Length];
+        for (int i = 0; i < vector.Length; i++)
+            array[i] = (float)vector[i];
+        return array;
+    }
 
     /// <summary>
     /// Calculates the dot product of two vectors using GPU acceleration.
@@ -29,10 +58,10 @@ public static class LinearAlgebraExtensions
         if (v2 == null) throw new ArgumentNullException(nameof(v2));
         if (v1.Length != v2.Length) throw new ArgumentException("Vectors must have the same length");
 
-        var (context, accelerator) = GpuContext;
+        var accelerator = GpuContext.Accelerator;
 
-        var array1 = v1.AsEnumerable().Select(d => (float)d).ToArray();
-        var array2 = v2.AsEnumerable().Select(d => (float)d).ToArray();
+        var array1 = ConvertToFloatArray(v1);
+        var array2 = ConvertToFloatArray(v2);
 
         using var deviceV1 = accelerator.Allocate1D(array1);
         using var deviceV2 = accelerator.Allocate1D(array2);
@@ -40,11 +69,7 @@ public static class LinearAlgebraExtensions
 
         deviceResult.MemSetToZero();
 
-        var dotKernel = accelerator.LoadAutoGroupedStreamKernel<
-            Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(DotProductKernel);
-
-        dotKernel(v1.Length, deviceV1.View, deviceV2.View, deviceResult.View);
-        accelerator.Synchronize();
+        _dotKernel.Value(v1.Length, deviceV1.View, deviceV2.View, deviceResult.View);
 
         return deviceResult.GetAsArray1D()[0];
     }
@@ -69,24 +94,19 @@ public static class LinearAlgebraExtensions
         if (v2 == null) throw new ArgumentNullException(nameof(v2));
         if (v1.Length != v2.Length) throw new ArgumentException("Vectors must have the same length");
 
-        var (context, accelerator) = GpuContext;
+        var accelerator = GpuContext.Accelerator;
 
-        var array1 = v1.AsEnumerable().Select(d => (float)d).ToArray();
-        var array2 = v2.AsEnumerable().Select(d => (float)d).ToArray();
-        var result = new double[v1.Length];
+        var array1 = ConvertToFloatArray(v1);
+        var array2 = ConvertToFloatArray(v2);
 
         using var deviceV1 = accelerator.Allocate1D(array1);
         using var deviceV2 = accelerator.Allocate1D(array2);
         using var deviceResult = accelerator.Allocate1D<float>(v1.Length);
 
-        var addKernel = accelerator.LoadAutoGroupedStreamKernel<
-            Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(AddKernel);
+        _addKernel.Value(v1.Length, deviceV1.View, deviceV2.View, deviceResult.View);
 
-        addKernel(v1.Length, deviceV1.View, deviceV2.View, deviceResult.View);
-        accelerator.Synchronize();
-
-        var floatResult = new float[v1.Length];
-        deviceResult.CopyToCPU(floatResult);
+        var floatResult = deviceResult.GetAsArray1D();
+        var result = new double[v1.Length];
         for (int i = 0; i < v1.Length; i++)
             result[i] = floatResult[i];
         return new Vector(result);
@@ -101,24 +121,19 @@ public static class LinearAlgebraExtensions
         if (v2 == null) throw new ArgumentNullException(nameof(v2));
         if (v1.Length != v2.Length) throw new ArgumentException("Vectors must have the same length");
 
-        var (context, accelerator) = GpuContext;
+        var accelerator = GpuContext.Accelerator;
 
-        var array1 = v1.AsEnumerable().Select(d => (float)d).ToArray();
-        var array2 = v2.AsEnumerable().Select(d => (float)d).ToArray();
-        var result = new double[v1.Length];
+        var array1 = ConvertToFloatArray(v1);
+        var array2 = ConvertToFloatArray(v2);
 
         using var deviceV1 = accelerator.Allocate1D(array1);
         using var deviceV2 = accelerator.Allocate1D(array2);
         using var deviceResult = accelerator.Allocate1D<float>(v1.Length);
 
-        var subtractKernel = accelerator.LoadAutoGroupedStreamKernel<
-            Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(SubtractKernel);
+        _subtractKernel.Value(v1.Length, deviceV1.View, deviceV2.View, deviceResult.View);
 
-        subtractKernel(v1.Length, deviceV1.View, deviceV2.View, deviceResult.View);
-        accelerator.Synchronize();
-
-        var floatResult = new float[v1.Length];
-        deviceResult.CopyToCPU(floatResult);
+        var floatResult = deviceResult.GetAsArray1D();
+        var result = new double[v1.Length];
         for (int i = 0; i < v1.Length; i++)
             result[i] = floatResult[i];
         return new Vector(result);
@@ -131,22 +146,17 @@ public static class LinearAlgebraExtensions
     {
         if (vector == null) throw new ArgumentNullException(nameof(vector));
 
-        var (context, accelerator) = GpuContext;
+        var accelerator = GpuContext.Accelerator;
 
-        var array = vector.AsEnumerable().Select(d => (float)d).ToArray();
-        var result = new double[vector.Length];
+        var array = ConvertToFloatArray(vector);
 
         using var deviceVector = accelerator.Allocate1D(array);
         using var deviceResult = accelerator.Allocate1D<float>(vector.Length);
 
-        var scalarMultKernel = accelerator.LoadAutoGroupedStreamKernel<
-            Index1D, ArrayView<float>, float, ArrayView<float>>(ScalarMultiplyKernel);
+        _scalarMultKernel.Value(vector.Length, deviceVector.View, scalar, deviceResult.View);
 
-        scalarMultKernel(vector.Length, deviceVector.View, scalar, deviceResult.View);
-        accelerator.Synchronize();
-
-        var floatResult = new float[vector.Length];
-        deviceResult.CopyToCPU(floatResult);
+        var floatResult = deviceResult.GetAsArray1D();
+        var result = new double[vector.Length];
         for (int i = 0; i < vector.Length; i++)
             result[i] = floatResult[i];
         return new Vector(result);
@@ -159,23 +169,19 @@ public static class LinearAlgebraExtensions
     {
         if (vector == null) throw new ArgumentNullException(nameof(vector));
 
-        var (context, accelerator) = GpuContext;
+        var accelerator = GpuContext.Accelerator;
 
-        var array = vector.AsEnumerable().Select(d => (float)d).ToArray();
+        var array = ConvertToFloatArray(vector);
 
         using var deviceVector = accelerator.Allocate1D(array);
         using var deviceResult = accelerator.Allocate1D<float>(1);
 
         deviceResult.MemSetToZero();
 
-        var magnitudeKernel = accelerator.LoadAutoGroupedStreamKernel<
-            Index1D, ArrayView<float>, ArrayView<float>>(MagnitudeKernel);
-
-        magnitudeKernel(vector.Length, deviceVector.View, deviceResult.View);
-        accelerator.Synchronize();
+        _magnitudeKernel.Value(vector.Length, deviceVector.View, deviceResult.View);
 
         var sumOfSquares = deviceResult.GetAsArray1D()[0];
-        return (float)Math.Sqrt(sumOfSquares);
+        return MathF.Sqrt(sumOfSquares);
     }
 
     /// <summary>
@@ -201,9 +207,8 @@ public static class LinearAlgebraExtensions
         if (m1.Columns != m2.Rows)
             throw new ArgumentException("First matrix columns must equal second matrix rows");
 
-        var (context, accelerator) = GpuContext;
+        var accelerator = GpuContext.Accelerator;
 
-        // Flatten matrices to 1D arrays for GPU processing and convert to float
         var m1Flat = new float[m1.Rows * m1.Columns];
         var m2Flat = new float[m2.Rows * m2.Columns];
 
@@ -215,25 +220,17 @@ public static class LinearAlgebraExtensions
             for (int j = 0; j < m2.Columns; j++)
                 m2Flat[i * m2.Columns + j] = (float)m2[i, j];
 
-        var resultFlat = new float[m1.Rows * m2.Columns];
-
         using var deviceM1 = accelerator.Allocate1D(m1Flat);
         using var deviceM2 = accelerator.Allocate1D(m2Flat);
         using var deviceResult = accelerator.Allocate1D<float>(m1.Rows * m2.Columns);
 
         deviceResult.MemSetToZero();
 
-        var matrixMultKernel = accelerator.LoadAutoGroupedStreamKernel<
-            Index1D, ArrayView<float>, ArrayView<float>, int, int, int, ArrayView<float>>(
-            MatrixMultiplyKernel);
-
-        matrixMultKernel(m1.Rows * m2.Columns, deviceM1.View, deviceM2.View, 
+        _matrixMultKernel.Value(m1.Rows * m2.Columns, deviceM1.View, deviceM2.View, 
             m1.Rows, m1.Columns, m2.Columns, deviceResult.View);
-        accelerator.Synchronize();
 
-        deviceResult.CopyToCPU(resultFlat);
+        var resultFlat = deviceResult.GetAsArray1D();
 
-        // Convert flat array back to matrix
         var result = new Matrix(m1.Rows, m2.Columns);
         for (int i = 0; i < m1.Rows; i++)
             for (int j = 0; j < m2.Columns; j++)

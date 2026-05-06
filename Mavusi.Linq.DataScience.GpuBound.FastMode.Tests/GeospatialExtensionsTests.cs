@@ -6,7 +6,7 @@ namespace Mavusi.Linq.DataScience.GpuBound.FastMode.Tests;
 public class GeospatialExtensionsTests
 {
     [Fact]
-    public void HaversineDistanceGpu_SamePoint_ReturnsZero()
+    public void HaversineDistance_SamePoint_ReturnsZero()
     {
         // Arrange
         var coord1 = new GeoCoordinate(40.7128, -74.0060); // New York
@@ -15,7 +15,7 @@ public class GeospatialExtensionsTests
         try
         {
             // Act
-            var result = coord1.HaversineDistanceGpu(coord2);
+            var result = coord1.HaversineDistance(coord2);
 
             // Assert
             Assert.Equal(0.0f, result, precision: 4);
@@ -27,7 +27,7 @@ public class GeospatialExtensionsTests
     }
 
     [Fact]
-    public void HaversineDistanceGpu_KnownDistance_CalculatesCorrectly()
+    public void HaversineDistance_KnownDistance_CalculatesCorrectly()
     {
         // Arrange
         var newYork = new GeoCoordinate(40.7128, -74.0060);
@@ -36,7 +36,7 @@ public class GeospatialExtensionsTests
         try
         {
             // Act
-            var result = newYork.HaversineDistanceGpu(london);
+            var result = newYork.HaversineDistance(london);
 
             // Assert - Distance should be approximately 5570 km
             Assert.InRange(result, 5500f, 5600f);
@@ -48,7 +48,7 @@ public class GeospatialExtensionsTests
     }
 
     [Fact]
-    public void HaversineDistanceMilesGpu_KnownDistance_CalculatesCorrectly()
+    public void HaversineDistanceMiles_KnownDistance_CalculatesCorrectly()
     {
         // Arrange
         var newYork = new GeoCoordinate(40.7128, -74.0060);
@@ -57,7 +57,7 @@ public class GeospatialExtensionsTests
         try
         {
             // Act
-            var result = newYork.HaversineDistanceMilesGpu(losAngeles);
+            var result = newYork.HaversineDistanceMiles(losAngeles);
 
             // Assert - Distance should be approximately 2450 miles
             Assert.InRange(result, 2400f, 2500f);
@@ -189,7 +189,7 @@ public class GeospatialExtensionsTests
     }
 
     [Fact]
-    public void HaversineDistanceGpu_Equator_CalculatesCorrectly()
+    public void HaversineDistance_Equator_CalculatesCorrectly()
     {
         // Arrange - Two points on the equator, 1 degree apart
         var coord1 = new GeoCoordinate(0.0, 0.0);
@@ -198,7 +198,7 @@ public class GeospatialExtensionsTests
         try
         {
             // Act
-            var result = coord1.HaversineDistanceGpu(coord2);
+            var result = coord1.HaversineDistance(coord2);
 
             // Assert - 1 degree at equator ≈ 111 km
             Assert.InRange(result, 110f, 112f);
@@ -271,7 +271,7 @@ public class GeospatialExtensionsTests
     }
 
     [Fact]
-    public void HaversineDistanceGpu_AntipodePoints_CalculatesMaxDistance()
+    public void HaversineDistance_AntipodePoints_CalculatesMaxDistance()
     {
         // Arrange - Opposite sides of Earth
         var north = new GeoCoordinate(90.0, 0.0);  // North pole
@@ -280,7 +280,7 @@ public class GeospatialExtensionsTests
         try
         {
             // Act
-            var result = north.HaversineDistanceGpu(south);
+            var result = north.HaversineDistance(south);
 
             // Assert - Should be approximately half Earth's circumference (~20,000 km)
             Assert.InRange(result, 19000f, 21000f);

@@ -1,12 +1,14 @@
 using ILGPU;
+using ILGPU.Algorithms;
 using ILGPU.Runtime;
 using Mavusi.Linq.DataScience.Models;
+using System.Runtime.CompilerServices;
 
 namespace Mavusi.Linq.DataScience.GpuBound;
 
 
 /// <summary>
-/// GPU-accelerated geospatial operations using ILGPU.
+/// GPU-accelerated geospatial operations using ILGPU with optimized 32-bit precision.
 /// </summary>
 public static class GeospatialExtensions
 {
@@ -15,53 +17,71 @@ public static class GeospatialExtensions
 
     private const float EarthRadiusKm = 6371.0f;
     private const float EarthRadiusMiles = 3959.0f;
+    private const float PI = 3.14159265f;
+    private const float DEG_TO_RAD = PI / 180.0f;
+
+    // Cached kernel delegates to avoid recompilation
+    private static Action<Index1D, float, float, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _distanceKernelCache;
+    private static Action<Index1D, ArrayView<float>, ArrayView<float>, int, ArrayView<float>>? _pairwiseKernelCache;
+    private static readonly object _kernelLock = new();
 
     /// <summary>
-    /// Calculates the Haversine distance in kilometers between two geographical coordinates using GPU acceleration.
+    /// Calculates the Haversine distance in kilometers between two geographical coordinates.
+    /// Note: This method runs on CPU. For batch operations, use CalculateDistancesGpu for true GPU acceleration.
     /// </summary>
-    public static float HaversineDistanceGpu(this GeoCoordinate from, GeoCoordinate to)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float HaversineDistance(this GeoCoordinate from, GeoCoordinate to)
     {
         if (from == null) throw new ArgumentNullException(nameof(from));
         if (to == null) throw new ArgumentNullException(nameof(to));
 
-        var lat1 = DegreesToRadians(from.Latitude);
-        var lat2 = DegreesToRadians(to.Latitude);
-        var dLat = DegreesToRadians(to.Latitude - from.Latitude);
-        var dLon = DegreesToRadians(to.Longitude - from.Longitude);
+        var lat1 = (float)from.Latitude * DEG_TO_RAD;
+        var lat2 = (float)to.Latitude * DEG_TO_RAD;
+        var dLat = (float)(to.Latitude - from.Latitude) * DEG_TO_RAD;
+        var dLon = (float)(to.Longitude - from.Longitude) * DEG_TO_RAD;
 
-        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
-                Math.Cos(lat1) * Math.Cos(lat2) *
-                Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+        var sinDLat = MathF.Sin(dLat * 0.5f);
+        var sinDLon = MathF.Sin(dLon * 0.5f);
 
-        var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+        var a = sinDLat * sinDLat +
+                MathF.Cos(lat1) * MathF.Cos(lat2) *
+                sinDLon * sinDLon;
 
-        return (float)(EarthRadiusKm * c);
+        var c = 2.0f * MathF.Atan2(MathF.Sqrt(a), MathF.Sqrt(1.0f - a));
+
+        return EarthRadiusKm * c;
     }
 
     /// <summary>
-    /// Calculates the Haversine distance in miles between two geographical coordinates using GPU acceleration.
+    /// Calculates the Haversine distance in miles between two geographical coordinates.
+    /// Note: This method runs on CPU. For batch operations, use CalculateDistancesGpu for true GPU acceleration.
     /// </summary>
-    public static float HaversineDistanceMilesGpu(this GeoCoordinate from, GeoCoordinate to)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float HaversineDistanceMiles(this GeoCoordinate from, GeoCoordinate to)
     {
         if (from == null) throw new ArgumentNullException(nameof(from));
         if (to == null) throw new ArgumentNullException(nameof(to));
 
-        var lat1 = DegreesToRadians(from.Latitude);
-        var lat2 = DegreesToRadians(to.Latitude);
-        var dLat = DegreesToRadians(to.Latitude - from.Latitude);
-        var dLon = DegreesToRadians(to.Longitude - from.Longitude);
+        var lat1 = (float)from.Latitude * DEG_TO_RAD;
+        var lat2 = (float)to.Latitude * DEG_TO_RAD;
+        var dLat = (float)(to.Latitude - from.Latitude) * DEG_TO_RAD;
+        var dLon = (float)(to.Longitude - from.Longitude) * DEG_TO_RAD;
 
-        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
-                Math.Cos(lat1) * Math.Cos(lat2) *
-                Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+        var sinDLat = MathF.Sin(dLat * 0.5f);
+        var sinDLon = MathF.Sin(dLon * 0.5f);
 
-        var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+        var a = sinDLat * sinDLat +
+                MathF.Cos(lat1) * MathF.Cos(lat2) *
+                sinDLon * sinDLon;
 
-        return (float)(EarthRadiusMiles * c);
+        var c = 2.0f * MathF.Atan2(MathF.Sqrt(a), MathF.Sqrt(1.0f - a));
+
+        return EarthRadiusMiles * c;
     }
 
     /// <summary>
     /// Calculates distances from a center point to multiple coordinates in parallel using GPU acceleration.
+    /// Optimized for 32-bit precision and maximum throughput.
     /// </summary>
     public static float[] CalculateDistancesGpu(this GeoCoordinate center, IEnumerable<GeoCoordinate> coordinates)
     {
@@ -73,20 +93,24 @@ public static class GeospatialExtensions
 
         var (context, accelerator) = GpuContext;
 
-        // Flatten coordinates to arrays
-        var latitudes = coordArray.Select(c => c.Latitude).ToArray();
-        var longitudes = coordArray.Select(c => c.Longitude).ToArray();
+        // Convert to float arrays for optimal GPU memory bandwidth (32-bit vs 64-bit)
+        var latitudes = new float[coordArray.Length];
+        var longitudes = new float[coordArray.Length];
+        for (int i = 0; i < coordArray.Length; i++)
+        {
+            latitudes[i] = (float)coordArray[i].Latitude;
+            longitudes[i] = (float)coordArray[i].Longitude;
+        }
         var results = new float[coordArray.Length];
 
         using var deviceLats = accelerator.Allocate1D(latitudes);
         using var deviceLons = accelerator.Allocate1D(longitudes);
         using var deviceResults = accelerator.Allocate1D<float>(coordArray.Length);
 
-        var distanceKernel = accelerator.LoadAutoGroupedStreamKernel<
-            Index1D, double, double, ArrayView<double>, ArrayView<double>, ArrayView<float>>(
-            HaversineDistanceKernel);
+        // Use cached kernel to avoid recompilation overhead
+        var distanceKernel = GetOrCreateDistanceKernel(accelerator);
 
-        distanceKernel(coordArray.Length, center.Latitude, center.Longitude, 
+        distanceKernel(coordArray.Length, (float)center.Latitude, (float)center.Longitude, 
             deviceLats.View, deviceLons.View, deviceResults.View);
         accelerator.Synchronize();
 
@@ -150,6 +174,7 @@ public static class GeospatialExtensions
 
     /// <summary>
     /// Calculates pairwise distances between all coordinate pairs using GPU acceleration.
+    /// Optimized for 32-bit precision and maximum throughput.
     /// </summary>
     public static float[,] PairwiseDistancesGpu(this IEnumerable<GeoCoordinate> coordinates)
     {
@@ -161,17 +186,22 @@ public static class GeospatialExtensions
         var (context, accelerator) = GpuContext;
         var n = coordArray.Length;
 
-        var latitudes = coordArray.Select(c => c.Latitude).ToArray();
-        var longitudes = coordArray.Select(c => c.Longitude).ToArray();
+        // Convert to float arrays for optimal GPU memory bandwidth (32-bit vs 64-bit)
+        var latitudes = new float[n];
+        var longitudes = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            latitudes[i] = (float)coordArray[i].Latitude;
+            longitudes[i] = (float)coordArray[i].Longitude;
+        }
         var resultsFlat = new float[n * n];
 
         using var deviceLats = accelerator.Allocate1D(latitudes);
         using var deviceLons = accelerator.Allocate1D(longitudes);
         using var deviceResults = accelerator.Allocate1D<float>(n * n);
 
-        var pairwiseKernel = accelerator.LoadAutoGroupedStreamKernel<
-            Index1D, ArrayView<double>, ArrayView<double>, int, ArrayView<float>>(
-            PairwiseDistanceKernel);
+        // Use cached kernel to avoid recompilation overhead
+        var pairwiseKernel = GetOrCreatePairwiseKernel(accelerator);
 
         pairwiseKernel(n * n, deviceLats.View, deviceLons.View, n, deviceResults.View);
         accelerator.Synchronize();
@@ -189,46 +219,83 @@ public static class GeospatialExtensions
 
     // Helper methods
 
-    private static float DegreesToRadians(double degrees)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Action<Index1D, float, float, ArrayView<float>, ArrayView<float>, ArrayView<float>> GetOrCreateDistanceKernel(Accelerator accelerator)
     {
-        return (float)(degrees * Math.PI / 180.0);
+        if (_distanceKernelCache == null)
+        {
+            lock (_kernelLock)
+            {
+                if (_distanceKernelCache == null)
+                {
+                    _distanceKernelCache = accelerator.LoadAutoGroupedStreamKernel<
+                        Index1D, float, float, ArrayView<float>, ArrayView<float>, ArrayView<float>>(
+                        HaversineDistanceKernel);
+                }
+            }
+        }
+        return _distanceKernelCache;
     }
 
-    // GPU Kernels
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Action<Index1D, ArrayView<float>, ArrayView<float>, int, ArrayView<float>> GetOrCreatePairwiseKernel(Accelerator accelerator)
+    {
+        if (_pairwiseKernelCache == null)
+        {
+            lock (_kernelLock)
+            {
+                if (_pairwiseKernelCache == null)
+                {
+                    _pairwiseKernelCache = accelerator.LoadAutoGroupedStreamKernel<
+                        Index1D, ArrayView<float>, ArrayView<float>, int, ArrayView<float>>(
+                        PairwiseDistanceKernel);
+                }
+            }
+        }
+        return _pairwiseKernelCache;
+    }
+
+    // GPU Kernels - Optimized for 32-bit precision and GPU execution
 
     private static void HaversineDistanceKernel(
         Index1D index,
-        double centerLat,
-        double centerLon,
-        ArrayView<double> latitudes,
-        ArrayView<double> longitudes,
+        float centerLat,
+        float centerLon,
+        ArrayView<float> latitudes,
+        ArrayView<float> longitudes,
         ArrayView<float> distances)
     {
         if (index < latitudes.Length)
         {
-            const double PI = 3.14159265358979323846;
-            var lat1 = centerLat * PI / 180.0;
-            var lat2 = latitudes[index] * PI / 180.0;
-            var dLat = (latitudes[index] - centerLat) * PI / 180.0;
-            var dLon = (longitudes[index] - centerLon) * PI / 180.0;
+            // Use 32-bit precision throughout for optimal GPU performance
+            const float DEG_TO_RAD = 0.0174532925f; // PI / 180
+            var lat1 = centerLat * DEG_TO_RAD;
+            var lat2 = latitudes[index] * DEG_TO_RAD;
+            var dLat = (latitudes[index] - centerLat) * DEG_TO_RAD;
+            var dLon = (longitudes[index] - centerLon) * DEG_TO_RAD;
 
-            var sinDLat = Math.Sin(dLat / 2);
-            var sinDLon = Math.Sin(dLon / 2);
+            // ILGPU automatically converts Math.* to GPU intrinsics for single precision
+            var halfDLat = dLat * 0.5f;
+            var halfDLon = dLon * 0.5f;
+            var sinDLat = (float)Math.Sin(halfDLat);
+            var sinDLon = (float)Math.Sin(halfDLon);
 
             var a = sinDLat * sinDLat +
-                    Math.Cos(lat1) * Math.Cos(lat2) *
+                    (float)Math.Cos(lat1) * (float)Math.Cos(lat2) *
                     sinDLon * sinDLon;
 
-            var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+            var sqrtA = (float)Math.Sqrt(a);
+            var sqrtOneMinusA = (float)Math.Sqrt(1.0f - a);
+            var c = 2.0f * (float)Math.Atan2(sqrtA, sqrtOneMinusA);
 
-            distances[index] = (float)(6371.0 * c); // Earth radius in km
+            distances[index] = 6371.0f * c; // Earth radius in km
         }
     }
 
     private static void PairwiseDistanceKernel(
         Index1D index,
-        ArrayView<double> latitudes,
-        ArrayView<double> longitudes,
+        ArrayView<float> latitudes,
+        ArrayView<float> longitudes,
         int n,
         ArrayView<float> distances)
     {
@@ -243,22 +310,28 @@ public static class GeospatialExtensions
                 return;
             }
 
-            const double PI = 3.14159265358979323846;
-            var lat1 = latitudes[i] * PI / 180.0;
-            var lat2 = latitudes[j] * PI / 180.0;
-            var dLat = (latitudes[j] - latitudes[i]) * PI / 180.0;
-            var dLon = (longitudes[j] - longitudes[i]) * PI / 180.0;
+            // Use 32-bit precision throughout for optimal GPU performance
+            const float DEG_TO_RAD = 0.0174532925f; // PI / 180
+            var lat1 = latitudes[i] * DEG_TO_RAD;
+            var lat2 = latitudes[j] * DEG_TO_RAD;
+            var dLat = (latitudes[j] - latitudes[i]) * DEG_TO_RAD;
+            var dLon = (longitudes[j] - longitudes[i]) * DEG_TO_RAD;
 
-            var sinDLat = Math.Sin(dLat / 2);
-            var sinDLon = Math.Sin(dLon / 2);
+            // ILGPU automatically converts Math.* to GPU intrinsics for single precision
+            var halfDLat = dLat * 0.5f;
+            var halfDLon = dLon * 0.5f;
+            var sinDLat = (float)Math.Sin(halfDLat);
+            var sinDLon = (float)Math.Sin(halfDLon);
 
             var a = sinDLat * sinDLat +
-                    Math.Cos(lat1) * Math.Cos(lat2) *
+                    (float)Math.Cos(lat1) * (float)Math.Cos(lat2) *
                     sinDLon * sinDLon;
 
-            var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+            var sqrtA = (float)Math.Sqrt(a);
+            var sqrtOneMinusA = (float)Math.Sqrt(1.0f - a);
+            var c = 2.0f * (float)Math.Atan2(sqrtA, sqrtOneMinusA);
 
-            distances[index] = (float)(6371.0 * c); // Earth radius in km
+            distances[index] = 6371.0f * c; // Earth radius in km
         }
     }
 }

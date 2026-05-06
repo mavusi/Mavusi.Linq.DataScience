@@ -8,8 +8,8 @@ public class CorrelationExtensionsTests
     public void CorrelationGpu_PerfectPositiveCorrelation_ReturnsOne()
     {
         // Arrange
-        var x = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
-        var y = new[] { 2.0, 4.0, 6.0, 8.0, 10.0 };
+        var x = new[] { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f };
+        var y = new[] { 2.0f, 4.0f, 6.0f, 8.0f, 10.0f };
 
         try
         {
@@ -29,8 +29,8 @@ public class CorrelationExtensionsTests
     public void CorrelationGpu_PerfectNegativeCorrelation_ReturnsNegativeOne()
     {
         // Arrange
-        var x = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
-        var y = new[] { 10.0, 8.0, 6.0, 4.0, 2.0 };
+        var x = new[] { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f };
+        var y = new[] { 10.0f, 8.0f, 6.0f, 4.0f, 2.0f };
 
         try
         {
@@ -50,8 +50,8 @@ public class CorrelationExtensionsTests
     public void CorrelationGpu_NoCorrelation_ReturnsNearZero()
     {
         // Arrange
-        var x = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
-        var y = new[] { 3.0, 3.0, 3.0, 3.0, 3.0 }; // Constant values
+        var x = new[] { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f };
+        var y = new[] { 3.0f, 3.0f, 3.0f, 3.0f, 3.0f }; // Constant values
 
         try
         {
@@ -73,15 +73,15 @@ public class CorrelationExtensionsTests
         // Arrange
         var data1 = new[]
         {
-            new { X = 1.0 },
-            new { X = 2.0 },
-            new { X = 3.0 }
+            new { X = 1.0f },
+            new { X = 2.0f },
+            new { X = 3.0f }
         };
         var data2 = new[]
         {
-            new { Y = 2.0 },
-            new { Y = 4.0 },
-            new { Y = 6.0 }
+            new { Y = 2.0f },
+            new { Y = 4.0f },
+            new { Y = 6.0f }
         };
 
         try
@@ -104,8 +104,8 @@ public class CorrelationExtensionsTests
     public void CovarianceGpu_PositiveCovariance_ReturnsPositive()
     {
         // Arrange
-        var x = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
-        var y = new[] { 2.0, 4.0, 6.0, 8.0, 10.0 };
+        var x = new[] { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f };
+        var y = new[] { 2.0f, 4.0f, 6.0f, 8.0f, 10.0f };
 
         try
         {
@@ -125,8 +125,8 @@ public class CorrelationExtensionsTests
     public void CovarianceGpu_NegativeCovariance_ReturnsNegative()
     {
         // Arrange
-        var x = new[] { 1.0, 2.0, 3.0, 4.0, 5.0 };
-        var y = new[] { 10.0, 8.0, 6.0, 4.0, 2.0 };
+        var x = new[] { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f };
+        var y = new[] { 10.0f, 8.0f, 6.0f, 4.0f, 2.0f };
 
         try
         {
@@ -148,15 +148,15 @@ public class CorrelationExtensionsTests
         // Arrange
         var data1 = new[]
         {
-            new { Value = 1.0 },
-            new { Value = 2.0 },
-            new { Value = 3.0 }
+            new { Value = 1.0f },
+            new { Value = 2.0f },
+            new { Value = 3.0f }
         };
         var data2 = new[]
         {
-            new { Value = 3.0 },
-            new { Value = 2.0 },
-            new { Value = 1.0 }
+            new { Value = 3.0f },
+            new { Value = 2.0f },
+            new { Value = 1.0f }
         };
 
         try
@@ -179,8 +179,8 @@ public class CorrelationExtensionsTests
     public void CorrelationGpu_UnequalLengths_ThrowsException()
     {
         // Arrange
-        var x = new[] { 1.0, 2.0, 3.0 };
-        var y = new[] { 1.0, 2.0 };
+        var x = new[] { 1.0f, 2.0f, 3.0f };
+        var y = new[] { 1.0f, 2.0f };
 
         try
         {
@@ -197,8 +197,8 @@ public class CorrelationExtensionsTests
     public void CovarianceGpu_EmptySequences_ThrowsException()
     {
         // Arrange
-        var x = Array.Empty<double>();
-        var y = Array.Empty<double>();
+        var x = Array.Empty<float>();
+        var y = Array.Empty<float>();
 
         try
         {
@@ -215,8 +215,8 @@ public class CorrelationExtensionsTests
     public void CorrelationGpu_RealWorldData_CalculatesCorrectly()
     {
         // Arrange - Temperature and ice cream sales (should be positively correlated)
-        var temperature = new[] { 20.0, 22.0, 25.0, 28.0, 30.0, 32.0 };
-        var sales = new[] { 50.0, 55.0, 65.0, 75.0, 80.0, 90.0 };
+        var temperature = new[] { 20.0f, 22.0f, 25.0f, 28.0f, 30.0f, 32.0f };
+        var sales = new[] { 50.0f, 55.0f, 65.0f, 75.0f, 80.0f, 90.0f };
 
         try
         {

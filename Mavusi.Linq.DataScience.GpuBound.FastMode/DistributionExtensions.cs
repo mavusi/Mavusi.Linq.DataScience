@@ -11,9 +11,14 @@ public static class DistributionExtensions
     private static (Context Context, Accelerator Accelerator) GpuContext => 
         GpuContextBase.GpuContext;
 
+    // Cached kernel delegates for performance
+    private static Action<Index1D, ArrayView<float>, ArrayView<float>>? _sumKernel;
+    private static Action<Index1D, ArrayView<float>, float, ArrayView<float>>? _skewnessKernel;
+    private static Action<Index1D, ArrayView<float>, float, ArrayView<float>>? _kurtosisKernel;
+
     /// <summary>
-    /// Calculates the median (50th percentile) of a sequence of values using GPU acceleration.
-    /// Note: Sorting is performed on CPU as GPU sorting is complex; GPU is used for percentile interpolation.
+    /// Calculates the median (50th percentile) of a sequence of values.
+    /// Note: Sorting is performed on CPU; no GPU acceleration for this operation.
     /// </summary>
     public static float MedianGpu(this IEnumerable<double> source)
     {
@@ -25,7 +30,7 @@ public static class DistributionExtensions
         int count = sorted.Length;
         if (count % 2 == 0)
         {
-            return (float)((sorted[count / 2 - 1] + sorted[count / 2]) / 2.0);
+            return (float)((sorted[count / 2 - 1] + sorted[count / 2]) * 0.5);
         }
         else
         {
@@ -34,18 +39,25 @@ public static class DistributionExtensions
     }
 
     /// <summary>
-    /// Calculates the median of a sequence using a selector function and GPU acceleration.
+    /// Calculates the median of a sequence using a selector function.
+    /// Note: Sorting is performed on CPU; no GPU acceleration for this operation.
     /// </summary>
     public static float MedianGpu<T>(this IEnumerable<T> source, Func<T, double> selector)
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
         if (selector == null) throw new ArgumentNullException(nameof(selector));
 
-        return source.Select(selector).MedianGpu();
+        var values = new List<double>();
+        foreach (var item in source)
+        {
+            values.Add(selector(item));
+        }
+        return values.MedianGpu();
     }
 
     /// <summary>
-    /// Calculates the specified quartile of a sequence using GPU acceleration.
+    /// Calculates the specified quartile of a sequence.
+    /// Note: Sorting is performed on CPU; no GPU acceleration for this operation.
     /// </summary>
     public static float QuartileGpu(this IEnumerable<double> source, int quartile)
     {
@@ -57,18 +69,25 @@ public static class DistributionExtensions
     }
 
     /// <summary>
-    /// Calculates the specified quartile of a sequence using a selector function and GPU acceleration.
+    /// Calculates the specified quartile of a sequence using a selector function.
+    /// Note: Sorting is performed on CPU; no GPU acceleration for this operation.
     /// </summary>
     public static float QuartileGpu<T>(this IEnumerable<T> source, int quartile, Func<T, double> selector)
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
         if (selector == null) throw new ArgumentNullException(nameof(selector));
 
-        return source.Select(selector).QuartileGpu(quartile);
+        var values = new List<double>();
+        foreach (var item in source)
+        {
+            values.Add(selector(item));
+        }
+        return values.QuartileGpu(quartile);
     }
 
     /// <summary>
-    /// Calculates the specified percentile of a sequence using GPU acceleration.
+    /// Calculates the specified percentile of a sequence.
+    /// Note: Sorting is performed on CPU; no GPU acceleration for this operation.
     /// </summary>
     public static float PercentileGpu(this IEnumerable<double> source, double percentile)
     {
@@ -82,53 +101,81 @@ public static class DistributionExtensions
         if (percentile == 0) return (float)sorted[0];
         if (percentile == 100) return (float)sorted[^1];
 
-        var index = (percentile / 100.0) * (sorted.Length - 1);
-        var lowerIndex = (int)Math.Floor(index);
-        var upperIndex = (int)Math.Ceiling(index);
+        float index = (float)(percentile * 0.01) * (sorted.Length - 1);
+        int lowerIndex = (int)MathF.Floor(index);
+        int upperIndex = (int)MathF.Ceiling(index);
 
         if (lowerIndex == upperIndex)
         {
             return (float)sorted[lowerIndex];
         }
 
-        var fraction = index - lowerIndex;
-        return (float)(sorted[lowerIndex] * (1 - fraction) + sorted[upperIndex] * fraction);
+        float fraction = index - lowerIndex;
+        return (float)sorted[lowerIndex] * (1f - fraction) + (float)sorted[upperIndex] * fraction;
     }
 
     /// <summary>
-    /// Calculates the specified percentile of a sequence using a selector function and GPU acceleration.
+    /// Calculates the specified percentile of a sequence using a selector function.
+    /// Note: Sorting is performed on CPU; no GPU acceleration for this operation.
     /// </summary>
     public static float PercentileGpu<T>(this IEnumerable<T> source, double percentile, Func<T, double> selector)
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
         if (selector == null) throw new ArgumentNullException(nameof(selector));
 
-        return source.Select(selector).PercentileGpu(percentile);
+        var values = new List<double>();
+        foreach (var item in source)
+        {
+            values.Add(selector(item));
+        }
+        return values.PercentileGpu(percentile);
     }
 
     /// <summary>
-    /// Calculates the interquartile range (IQR = Q3 - Q1) using GPU acceleration.
+    /// Calculates the interquartile range (IQR = Q3 - Q1).
+    /// Optimized to sort only once. Note: Sorting is performed on CPU; no GPU acceleration for this operation.
     /// </summary>
     public static float InterquartileRangeGpu(this IEnumerable<double> source)
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
 
-        var data = source.ToArray();
-        var q1 = data.QuartileGpu(1);
-        var q3 = data.QuartileGpu(3);
+        var sorted = source.OrderBy(x => x).ToArray();
+        if (sorted.Length == 0) throw new InvalidOperationException("Sequence contains no elements");
+
+        float q1Index = 0.25f * (sorted.Length - 1);
+        int q1Lower = (int)MathF.Floor(q1Index);
+        int q1Upper = (int)MathF.Ceiling(q1Index);
+        float q1Fraction = q1Index - q1Lower;
+        float q1 = q1Lower == q1Upper 
+            ? (float)sorted[q1Lower] 
+            : (float)sorted[q1Lower] * (1f - q1Fraction) + (float)sorted[q1Upper] * q1Fraction;
+
+        float q3Index = 0.75f * (sorted.Length - 1);
+        int q3Lower = (int)MathF.Floor(q3Index);
+        int q3Upper = (int)MathF.Ceiling(q3Index);
+        float q3Fraction = q3Index - q3Lower;
+        float q3 = q3Lower == q3Upper 
+            ? (float)sorted[q3Lower] 
+            : (float)sorted[q3Lower] * (1f - q3Fraction) + (float)sorted[q3Upper] * q3Fraction;
 
         return q3 - q1;
     }
 
     /// <summary>
-    /// Calculates the interquartile range (IQR = Q3 - Q1) using a selector function and GPU acceleration.
+    /// Calculates the interquartile range (IQR = Q3 - Q1) using a selector function.
+    /// Optimized to sort only once. Note: Sorting is performed on CPU; no GPU acceleration for this operation.
     /// </summary>
     public static float InterquartileRangeGpu<T>(this IEnumerable<T> source, Func<T, double> selector)
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
         if (selector == null) throw new ArgumentNullException(nameof(selector));
 
-        return source.Select(selector).InterquartileRangeGpu();
+        var values = new List<double>();
+        foreach (var item in source)
+        {
+            values.Add(selector(item));
+        }
+        return values.InterquartileRangeGpu();
     }
 
     /// <summary>
@@ -138,46 +185,64 @@ public static class DistributionExtensions
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
 
-        var values = source.ToArray();
-        if (values.Length == 0) throw new InvalidOperationException("Sequence contains no elements");
+        float[] floatValues;
+        if (source is double[] doubleArray)
+        {
+            floatValues = new float[doubleArray.Length];
+            for (int i = 0; i < doubleArray.Length; i++)
+            {
+                floatValues[i] = (float)doubleArray[i];
+            }
+        }
+        else
+        {
+            var list = new List<float>();
+            foreach (var value in source)
+            {
+                list.Add((float)value);
+            }
+            floatValues = list.ToArray();
+        }
+
+        if (floatValues.Length == 0) throw new InvalidOperationException("Sequence contains no elements");
 
         var (context, accelerator) = GpuContext;
 
-        // Convert to float for GPU processing
-        var floatValues = values.Select(v => (float)v).ToArray();
-
-        // Calculate mean
         using var deviceData = accelerator.Allocate1D(floatValues);
-        using var deviceSum = accelerator.Allocate1D<float>(1);
+        using var deviceResult = accelerator.Allocate1D<float>(1);
 
-        deviceSum.MemSetToZero();
+        if (_sumKernel == null)
+        {
+            _sumKernel = accelerator.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView<float>, ArrayView<float>>(SumKernel);
+        }
 
-        var sumKernel = accelerator.LoadAutoGroupedStreamKernel<
-            Index1D, ArrayView<float>, ArrayView<float>>(SumKernel);
-
-        sumKernel(floatValues.Length, deviceData.View, deviceSum.View);
+        deviceResult.MemSetToZero();
+        _sumKernel(floatValues.Length, deviceData.View, deviceResult.View);
         accelerator.Synchronize();
 
-        var mean = deviceSum.GetAsArray1D()[0] / floatValues.Length;
+        float mean = deviceResult.GetAsArray1D()[0] / floatValues.Length;
 
-        // Calculate m2 (variance), m3 (third moment)
         using var deviceMoments = accelerator.Allocate1D<float>(2);
         deviceMoments.MemSetToZero();
 
-        var momentsKernel = accelerator.LoadAutoGroupedStreamKernel<
-            Index1D, ArrayView<float>, float, ArrayView<float>>(SkewnessKernel);
+        if (_skewnessKernel == null)
+        {
+            _skewnessKernel = accelerator.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView<float>, float, ArrayView<float>>(SkewnessKernel);
+        }
 
-        momentsKernel(floatValues.Length, deviceData.View, mean, deviceMoments.View);
+        _skewnessKernel(floatValues.Length, deviceData.View, mean, deviceMoments.View);
         accelerator.Synchronize();
 
         var moments = deviceMoments.GetAsArray1D();
-        var m2 = moments[0] / floatValues.Length;
-        var m3 = moments[1] / floatValues.Length;
+        float m2 = moments[0] / floatValues.Length;
+        float m3 = moments[1] / floatValues.Length;
 
-        var stdDev = Math.Sqrt(m2);
+        float stdDev = MathF.Sqrt(m2);
         if (stdDev == 0) return 0;
 
-        return (float)(m3 / Math.Pow(stdDev, 3));
+        return m3 / (stdDev * stdDev * stdDev);
     }
 
     /// <summary>
@@ -188,7 +253,12 @@ public static class DistributionExtensions
         if (source == null) throw new ArgumentNullException(nameof(source));
         if (selector == null) throw new ArgumentNullException(nameof(selector));
 
-        return source.Select(selector).SkewnessGpu();
+        var values = new List<double>();
+        foreach (var item in source)
+        {
+            values.Add(selector(item));
+        }
+        return values.SkewnessGpu();
     }
 
     /// <summary>
@@ -198,46 +268,63 @@ public static class DistributionExtensions
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
 
-        var values = source.ToArray();
-        if (values.Length == 0) throw new InvalidOperationException("Sequence contains no elements");
+        float[] floatValues;
+        if (source is double[] doubleArray)
+        {
+            floatValues = new float[doubleArray.Length];
+            for (int i = 0; i < doubleArray.Length; i++)
+            {
+                floatValues[i] = (float)doubleArray[i];
+            }
+        }
+        else
+        {
+            var list = new List<float>();
+            foreach (var value in source)
+            {
+                list.Add((float)value);
+            }
+            floatValues = list.ToArray();
+        }
+
+        if (floatValues.Length == 0) throw new InvalidOperationException("Sequence contains no elements");
 
         var (context, accelerator) = GpuContext;
 
-        // Convert to float for GPU processing
-        var floatValues = values.Select(v => (float)v).ToArray();
-
-        // Calculate mean
         using var deviceData = accelerator.Allocate1D(floatValues);
-        using var deviceSum = accelerator.Allocate1D<float>(1);
+        using var deviceResult = accelerator.Allocate1D<float>(1);
 
-        deviceSum.MemSetToZero();
+        if (_sumKernel == null)
+        {
+            _sumKernel = accelerator.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView<float>, ArrayView<float>>(SumKernel);
+        }
 
-        var sumKernel = accelerator.LoadAutoGroupedStreamKernel<
-            Index1D, ArrayView<float>, ArrayView<float>>(SumKernel);
-
-        sumKernel(floatValues.Length, deviceData.View, deviceSum.View);
+        deviceResult.MemSetToZero();
+        _sumKernel(floatValues.Length, deviceData.View, deviceResult.View);
         accelerator.Synchronize();
 
-        var mean = deviceSum.GetAsArray1D()[0] / floatValues.Length;
+        float mean = deviceResult.GetAsArray1D()[0] / floatValues.Length;
 
-        // Calculate m2 (variance), m4 (fourth moment)
         using var deviceMoments = accelerator.Allocate1D<float>(2);
         deviceMoments.MemSetToZero();
 
-        var momentsKernel = accelerator.LoadAutoGroupedStreamKernel<
-            Index1D, ArrayView<float>, float, ArrayView<float>>(KurtosisKernel);
+        if (_kurtosisKernel == null)
+        {
+            _kurtosisKernel = accelerator.LoadAutoGroupedStreamKernel<
+                Index1D, ArrayView<float>, float, ArrayView<float>>(KurtosisKernel);
+        }
 
-        momentsKernel(floatValues.Length, deviceData.View, mean, deviceMoments.View);
+        _kurtosisKernel(floatValues.Length, deviceData.View, mean, deviceMoments.View);
         accelerator.Synchronize();
 
         var moments = deviceMoments.GetAsArray1D();
-        var m2 = moments[0] / floatValues.Length;
-        var m4 = moments[1] / floatValues.Length;
+        float m2 = moments[0] / floatValues.Length;
+        float m4 = moments[1] / floatValues.Length;
 
-        var variance = m2;
-        if (variance == 0) return 0;
+        if (m2 == 0) return 0;
 
-        return (float)((m4 / (variance * variance)) - 3.0); // Excess kurtosis
+        return (m4 / (m2 * m2)) - 3f;
     }
 
     /// <summary>
@@ -248,7 +335,12 @@ public static class DistributionExtensions
         if (source == null) throw new ArgumentNullException(nameof(source));
         if (selector == null) throw new ArgumentNullException(nameof(selector));
 
-        return source.Select(selector).KurtosisGpu();
+        var values = new List<double>();
+        foreach (var item in source)
+        {
+            values.Add(selector(item));
+        }
+        return values.KurtosisGpu();
     }
 
     // GPU Kernels

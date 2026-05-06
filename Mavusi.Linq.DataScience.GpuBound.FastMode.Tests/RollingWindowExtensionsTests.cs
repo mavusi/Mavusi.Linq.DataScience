@@ -110,7 +110,7 @@ public class RollingWindowExtensionsTests
     public void RollingMaxGpu_SimpleData_CalculatesCorrectly()
     {
         // Arrange
-        var data = new[] { 5.0f, 2.0f, 8.0f, 1.0f, 6.0f };
+        var data = new[] { 5.0, 2.0, 8.0, 1.0, 6.0 };
         var windowSize = 3;
 
         try

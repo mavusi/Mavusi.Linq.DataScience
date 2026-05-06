@@ -1,5 +1,6 @@
 using ILGPU;
 using ILGPU.Runtime;
+using System.Runtime.CompilerServices;
 
 namespace Mavusi.Linq.DataScience.GpuBound;
 
@@ -9,7 +10,25 @@ namespace Mavusi.Linq.DataScience.GpuBound;
 public static class StatisticalExtensions
 {
     private static (Context Context, Accelerator Accelerator) GpuContext => 
-        GpuContextBase.GpuContext;
+        GpuContextBase.FastGpuContext;
+
+    private static Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>? _cachedVarianceKernel;
+    private static readonly object _kernelLock = new object();
+
+    /// <summary>
+    /// Calculates the population standard deviation of a sequence of values using GPU acceleration.
+    /// </summary>
+    public static float StandardDeviationGpu(this IEnumerable<float> source)
+    {
+        if (source == null) throw new ArgumentNullException(nameof(source));
+
+        var values = source as float[] ?? source.ToArray();
+        if (values.Length == 0) throw new InvalidOperationException("Sequence contains no elements");
+
+        var (context, accelerator) = GpuContext;
+        var variance = CalculateVarianceGpuOptimized(accelerator, values, false);
+        return MathF.Sqrt(variance);
+    }
 
     /// <summary>
     /// Calculates the population standard deviation of a sequence of values using GPU acceleration.
@@ -18,12 +37,28 @@ public static class StatisticalExtensions
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
 
-        var values = source.ToArray();
+        var values = source as double[] ?? source.ToArray();
         if (values.Length == 0) throw new InvalidOperationException("Sequence contains no elements");
 
+        var floatValues = ConvertToFloat(values);
         var (context, accelerator) = GpuContext;
-        var variance = CalculateVarianceGpu(accelerator, values, false);
-        return (float)Math.Sqrt(variance);
+        var variance = CalculateVarianceGpuOptimized(accelerator, floatValues, false);
+        return MathF.Sqrt(variance);
+    }
+
+    /// <summary>
+    /// Calculates the sample standard deviation of a sequence of values using GPU acceleration.
+    /// </summary>
+    public static float StandardDeviationSampleGpu(this IEnumerable<float> source)
+    {
+        if (source == null) throw new ArgumentNullException(nameof(source));
+
+        var values = source as float[] ?? source.ToArray();
+        if (values.Length <= 1) throw new InvalidOperationException("Sequence must contain at least two elements");
+
+        var (context, accelerator) = GpuContext;
+        var variance = CalculateVarianceGpuOptimized(accelerator, values, true);
+        return MathF.Sqrt(variance);
     }
 
     /// <summary>
@@ -33,12 +68,24 @@ public static class StatisticalExtensions
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
 
-        var values = source.ToArray();
+        var values = source as double[] ?? source.ToArray();
         if (values.Length <= 1) throw new InvalidOperationException("Sequence must contain at least two elements");
 
+        var floatValues = ConvertToFloat(values);
         var (context, accelerator) = GpuContext;
-        var variance = CalculateVarianceGpu(accelerator, values, true);
-        return (float)Math.Sqrt(variance);
+        var variance = CalculateVarianceGpuOptimized(accelerator, floatValues, true);
+        return MathF.Sqrt(variance);
+    }
+
+    /// <summary>
+    /// Calculates the population standard deviation of a sequence of values using a selector and GPU acceleration.
+    /// </summary>
+    public static float StandardDeviationGpu<T>(this IEnumerable<T> source, Func<T, float> selector)
+    {
+        if (source == null) throw new ArgumentNullException(nameof(source));
+        if (selector == null) throw new ArgumentNullException(nameof(selector));
+
+        return source.Select(selector).StandardDeviationGpu();
     }
 
     /// <summary>
@@ -55,6 +102,17 @@ public static class StatisticalExtensions
     /// <summary>
     /// Calculates the sample standard deviation of a sequence of values using a selector and GPU acceleration.
     /// </summary>
+    public static float StandardDeviationSampleGpu<T>(this IEnumerable<T> source, Func<T, float> selector)
+    {
+        if (source == null) throw new ArgumentNullException(nameof(source));
+        if (selector == null) throw new ArgumentNullException(nameof(selector));
+
+        return source.Select(selector).StandardDeviationSampleGpu();
+    }
+
+    /// <summary>
+    /// Calculates the sample standard deviation of a sequence of values using a selector and GPU acceleration.
+    /// </summary>
     public static float StandardDeviationSampleGpu<T>(this IEnumerable<T> source, Func<T, double> selector)
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
@@ -66,15 +124,44 @@ public static class StatisticalExtensions
     /// <summary>
     /// Calculates the variance of a sequence of values using GPU acceleration.
     /// </summary>
+    public static float VarianceGpu(this IEnumerable<float> source)
+    {
+        if (source == null) throw new ArgumentNullException(nameof(source));
+
+        var values = source as float[] ?? source.ToArray();
+        if (values.Length == 0) throw new InvalidOperationException("Sequence contains no elements");
+
+        var (context, accelerator) = GpuContext;
+        return CalculateVarianceGpuOptimized(accelerator, values, false);
+    }
+
+    /// <summary>
+    /// Calculates the variance of a sequence of values using GPU acceleration.
+    /// </summary>
     public static float VarianceGpu(this IEnumerable<double> source)
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
 
-        var values = source.ToArray();
+        var values = source as double[] ?? source.ToArray();
         if (values.Length == 0) throw new InvalidOperationException("Sequence contains no elements");
 
+        var floatValues = ConvertToFloat(values);
         var (context, accelerator) = GpuContext;
-        return (float)CalculateVarianceGpu(accelerator, values, false);
+        return CalculateVarianceGpuOptimized(accelerator, floatValues, false);
+    }
+
+    /// <summary>
+    /// Calculates the sample variance of a sequence of values using GPU acceleration.
+    /// </summary>
+    public static float VarianceSampleGpu(this IEnumerable<float> source)
+    {
+        if (source == null) throw new ArgumentNullException(nameof(source));
+
+        var values = source as float[] ?? source.ToArray();
+        if (values.Length <= 1) throw new InvalidOperationException("Sequence must contain at least two elements");
+
+        var (context, accelerator) = GpuContext;
+        return CalculateVarianceGpuOptimized(accelerator, values, true);
     }
 
     /// <summary>
@@ -84,72 +171,91 @@ public static class StatisticalExtensions
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
 
-        var values = source.ToArray();
+        var values = source as double[] ?? source.ToArray();
         if (values.Length <= 1) throw new InvalidOperationException("Sequence must contain at least two elements");
 
+        var floatValues = ConvertToFloat(values);
         var (context, accelerator) = GpuContext;
-        return (float)CalculateVarianceGpu(accelerator, values, true);
+        return CalculateVarianceGpuOptimized(accelerator, floatValues, true);
     }
 
-    private static double CalculateVarianceGpu(Accelerator accelerator, double[] data, bool isSample)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static float[] ConvertToFloat(double[] data)
     {
-        // Convert to float for GPU processing
-        var floatData = data.Select(d => (float)d).ToArray();
-
-        // Calculate mean first
-        using var deviceData = accelerator.Allocate1D(floatData);
-        using var deviceSum = accelerator.Allocate1D<float>(1);
-
-        deviceSum.MemSetToZero();
-
-        var sumKernel = accelerator.LoadAutoGroupedStreamKernel<
-            Index1D, ArrayView<float>, ArrayView<float>>(SumKernel);
-
-        sumKernel(floatData.Length, deviceData.View, deviceSum.View);
-        accelerator.Synchronize();
-
-        var mean = deviceSum.GetAsArray1D()[0] / floatData.Length;
-
-        // Calculate sum of squared differences
-        using var deviceSumSquares = accelerator.Allocate1D<float>(1);
-        deviceSumSquares.MemSetToZero();
-
-        var varianceKernel = accelerator.LoadAutoGroupedStreamKernel<
-            Index1D, ArrayView<float>, float, ArrayView<float>>(VarianceKernel);
-
-        varianceKernel(data.Length, deviceData.View, mean, deviceSumSquares.View);
-        accelerator.Synchronize();
-
-        var sumOfSquares = deviceSumSquares.GetAsArray1D()[0];
-        var divisor = isSample ? data.Length - 1 : data.Length;
-
-        return sumOfSquares / divisor;
-    }
-
-    // GPU Kernel: Sum all elements
-    private static void SumKernel(Index1D index, ArrayView<float> input, ArrayView<float> output)
-    {
-        var sum = 0.0f;
-        for (int i = index; i < input.Length; i += Grid.DimX * Group.DimX)
+        var result = new float[data.Length];
+        for (int i = 0; i < data.Length; i++)
         {
-            sum += input[i];
+            result[i] = (float)data[i];
         }
-        Atomic.Add(ref output[0], sum);
+        return result;
     }
 
-    // GPU Kernel: Calculate sum of squared differences from mean
-    private static void VarianceKernel(
+    private static float CalculateVarianceGpuOptimized(Accelerator accelerator, float[] data, bool isSample)
+    {
+        var (mean, variance) = CalculateMeanAndVarianceGpuOptimized(accelerator, data, isSample);
+        return variance;
+    }
+
+    internal static (float Mean, float Variance) CalculateMeanAndVarianceGpuOptimized(Accelerator accelerator, float[] data, bool isSample)
+    {
+        using var deviceData = accelerator.Allocate1D(data);
+        using var deviceResults = accelerator.Allocate1D<float>(2);
+
+        deviceResults.MemSetToZero();
+
+        var kernel = GetOrCreateVarianceKernel(accelerator);
+        kernel(data.Length, deviceData.View, deviceResults.View, deviceResults.View.SubView(1, 1));
+        accelerator.Synchronize();
+
+        var results = deviceResults.GetAsArray1D();
+        var sum = results[0];
+        var sumOfSquares = results[1];
+
+        var n = data.Length;
+        var mean = sum / n;
+        var variance = (sumOfSquares / n) - (mean * mean);
+
+        if (isSample && n > 1)
+        {
+            variance *= (float)n / (n - 1);
+        }
+
+        return (mean, variance);
+    }
+
+    private static Action<Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>> GetOrCreateVarianceKernel(Accelerator accelerator)
+    {
+        if (_cachedVarianceKernel == null)
+        {
+            lock (_kernelLock)
+            {
+                if (_cachedVarianceKernel == null)
+                {
+                    _cachedVarianceKernel = accelerator.LoadAutoGroupedStreamKernel<
+                        Index1D, ArrayView<float>, ArrayView<float>, ArrayView<float>>(SinglePassVarianceKernel);
+                }
+            }
+        }
+        return _cachedVarianceKernel;
+    }
+
+    private static void SinglePassVarianceKernel(
         Index1D index,
         ArrayView<float> input,
-        float mean,
-        ArrayView<float> output)
+        ArrayView<float> sumOutput,
+        ArrayView<float> sumSquaresOutput)
     {
+        var sum = 0.0f;
         var sumSquares = 0.0f;
+
         for (int i = index; i < input.Length; i += Grid.DimX * Group.DimX)
         {
-            var diff = input[i] - mean;
-            sumSquares += diff * diff;
+            var value = input[i];
+            sum += value;
+            sumSquares += value * value;
         }
-        Atomic.Add(ref output[0], sumSquares);
+
+        Atomic.Add(ref sumOutput[0], sum);
+        Atomic.Add(ref sumSquaresOutput[0], sumSquares);
     }
 }
