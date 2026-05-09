@@ -16,10 +16,12 @@ public static class TimeSeriesExtensions
         if (source == null) throw new ArgumentNullException(nameof(source));
         if (interval <= TimeSpan.Zero) throw new ArgumentException("Interval must be greater than zero", nameof(interval));
 
+        var intervalTicks = interval.Ticks;
+
         return source.GroupBy(point =>
         {
-            var ticks = point.Timestamp.Ticks / interval.Ticks;
-            return new DateTime(ticks * interval.Ticks, point.Timestamp.Kind);
+            var ticks = point.Timestamp.Ticks / intervalTicks;
+            return new DateTime(ticks * intervalTicks, point.Timestamp.Kind);
         });
     }
 
@@ -114,17 +116,20 @@ public static class TimeSeriesExtensions
         if (source == null) throw new ArgumentNullException(nameof(source));
         if (windowSize <= 0) throw new ArgumentException("Window size must be greater than zero", nameof(windowSize));
 
-        var buffer = new Queue<TimeSeriesPoint<double>>(windowSize);
+        var buffer = new Queue<double>(windowSize);
+        var sum = new CompensatedSum();
 
         foreach (var point in source)
         {
-            buffer.Enqueue(point);
+            buffer.Enqueue(point.Value);
+            sum.Add(point.Value);
 
             if (buffer.Count == windowSize)
             {
-                var average = buffer.Average(p => p.Value);
-                yield return new TimeSeriesPoint<double>(point.Timestamp, average);
-                buffer.Dequeue();
+                yield return new TimeSeriesPoint<double>(point.Timestamp, sum.Value / windowSize);
+
+                var removed = buffer.Dequeue();
+                sum.Add(-removed);
             }
         }
     }
@@ -173,15 +178,19 @@ public static class TimeSeriesExtensions
         var current = orderedSource[0];
         yield return current;
 
+        var intervalTicks = interval.Ticks;
+
         for (int i = 1; i < orderedSource.Count; i++)
         {
             var next = orderedSource[i];
-            var expectedTime = current.Timestamp.Add(interval);
+            var expectedTicks = current.Timestamp.Ticks + intervalTicks;
+            var nextTicks = next.Timestamp.Ticks;
+            var kind = current.Timestamp.Kind;
 
-            while (expectedTime < next.Timestamp)
+            while (expectedTicks < nextTicks)
             {
-                yield return new TimeSeriesPoint<T>(expectedTime, fillValue);
-                expectedTime = expectedTime.Add(interval);
+                yield return new TimeSeriesPoint<T>(new DateTime(expectedTicks, kind), fillValue);
+                expectedTicks += intervalTicks;
             }
 
             yield return next;
@@ -204,5 +213,21 @@ public static class TimeSeriesExtensions
         return source.Select(item => new TimeSeriesPoint<TValue>(
             timestampSelector(item),
             valueSelector(item)));
+    }
+
+    private struct CompensatedSum
+    {
+        private double _sum;
+        private double _compensation;
+
+        public double Value => _sum;
+
+        public void Add(double value)
+        {
+            var corrected = value - _compensation;
+            var next = _sum + corrected;
+            _compensation = (next - _sum) - corrected;
+            _sum = next;
+        }
     }
 }

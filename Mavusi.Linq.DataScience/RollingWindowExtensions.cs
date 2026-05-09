@@ -28,7 +28,6 @@ public static class RollingWindowExtensions
         if (windowSize <= 0) throw new ArgumentException("Window size must be greater than zero", nameof(windowSize));
 
         var buffer = new Queue<T>(windowSize);
-        var index = 0;
         var windowIndex = 0;
 
         foreach (var item in source)
@@ -41,8 +40,6 @@ public static class RollingWindowExtensions
                 buffer.Dequeue();
                 windowIndex++;
             }
-
-            index++;
         }
     }
 
@@ -59,7 +56,7 @@ public static class RollingWindowExtensions
 
         for (int i = 0; i <= values.Count - windowSize; i += step)
         {
-            yield return new Window<T>(i, values.Skip(i).Take(windowSize).ToList());
+            yield return new Window<T>(i, values.GetRange(i, windowSize));
         }
     }
 
@@ -71,7 +68,7 @@ public static class RollingWindowExtensions
         if (source == null) throw new ArgumentNullException(nameof(source));
         if (windowSize <= 0) throw new ArgumentException("Window size must be greater than zero", nameof(windowSize));
 
-        return source.RollingWindow(windowSize).Select(w => w.Values.Average());
+        return RollingAverageIterator(source, windowSize);
     }
 
     /// <summary>
@@ -94,7 +91,7 @@ public static class RollingWindowExtensions
         if (source == null) throw new ArgumentNullException(nameof(source));
         if (windowSize <= 0) throw new ArgumentException("Window size must be greater than zero", nameof(windowSize));
 
-        return source.RollingWindow(windowSize).Select(w => w.Values.Sum());
+        return RollingSumIterator(source, windowSize);
     }
 
     /// <summary>
@@ -105,7 +102,7 @@ public static class RollingWindowExtensions
         if (source == null) throw new ArgumentNullException(nameof(source));
         if (windowSize <= 0) throw new ArgumentException("Window size must be greater than zero", nameof(windowSize));
 
-        return source.RollingWindow(windowSize).Select(w => w.Values.StandardDeviation());
+        return RollingStandardDeviationIterator(source, windowSize);
     }
 
     /// <summary>
@@ -121,5 +118,81 @@ public static class RollingWindowExtensions
         if (windowSize <= 0) throw new ArgumentException("Window size must be greater than zero", nameof(windowSize));
 
         return source.RollingWindow(windowSize).Select(w => aggregator(w.Values));
+    }
+
+    private static IEnumerable<double> RollingSumIterator(IEnumerable<double> source, int windowSize)
+    {
+        var buffer = new Queue<double>(windowSize);
+        var sum = new CompensatedSum();
+
+        foreach (var value in source)
+        {
+            buffer.Enqueue(value);
+            sum.Add(value);
+
+            if (buffer.Count == windowSize)
+            {
+                yield return sum.Value;
+
+                var removed = buffer.Dequeue();
+                sum.Add(-removed);
+            }
+        }
+    }
+
+    private static IEnumerable<double> RollingAverageIterator(IEnumerable<double> source, int windowSize)
+    {
+        foreach (var windowSum in RollingSumIterator(source, windowSize))
+        {
+            yield return windowSum / windowSize;
+        }
+    }
+
+    private static IEnumerable<double> RollingStandardDeviationIterator(IEnumerable<double> source, int windowSize)
+    {
+        var buffer = new Queue<double>(windowSize);
+        var sum = new CompensatedSum();
+        var sumSquares = new CompensatedSum();
+
+        foreach (var value in source)
+        {
+            buffer.Enqueue(value);
+            sum.Add(value);
+            sumSquares.Add(value * value);
+
+            if (buffer.Count == windowSize)
+            {
+                var mean = sum.Value / windowSize;
+                var variance = (sumSquares.Value / windowSize) - (mean * mean);
+
+                // Guard against tiny negative values from floating-point roundoff.
+                if (variance < 0 && variance > -1e-12)
+                {
+                    variance = 0;
+                }
+
+                yield return Math.Sqrt(variance);
+
+                var removed = buffer.Dequeue();
+                sum.Add(-removed);
+                sumSquares.Add(-(removed * removed));
+            }
+        }
+    }
+
+    private struct CompensatedSum
+    {
+        private double _sum;
+        private double _compensation;
+
+        public double Value => _sum;
+
+        public void Add(double value)
+        {
+            var corrected = value - _compensation;
+            var next = _sum + corrected;
+            _compensation = (next - _sum) - corrected;
+            _sum = next;
+        }
     }
 }

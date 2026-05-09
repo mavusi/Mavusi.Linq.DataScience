@@ -25,6 +25,7 @@ public static class GeospatialExtensions
 {
     private const double EarthRadiusKm = 6371.0;
     private const double EarthRadiusMiles = 3959.0;
+    private const double KmToMiles = EarthRadiusMiles / EarthRadiusKm;
 
     /// <summary>
     /// Calculates the Haversine distance in kilometers between two geographical coordinates.
@@ -34,18 +35,7 @@ public static class GeospatialExtensions
         if (from == null) throw new ArgumentNullException(nameof(from));
         if (to == null) throw new ArgumentNullException(nameof(to));
 
-        var lat1 = DegreesToRadians(from.Latitude);
-        var lat2 = DegreesToRadians(to.Latitude);
-        var dLat = DegreesToRadians(to.Latitude - from.Latitude);
-        var dLon = DegreesToRadians(to.Longitude - from.Longitude);
-
-        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
-                Math.Cos(lat1) * Math.Cos(lat2) *
-                Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
-
-        var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
-
-        return EarthRadiusKm * c;
+        return EarthRadiusKm * ComputeAngularDistanceRadians(from, to);
     }
 
     /// <summary>
@@ -56,18 +46,7 @@ public static class GeospatialExtensions
         if (from == null) throw new ArgumentNullException(nameof(from));
         if (to == null) throw new ArgumentNullException(nameof(to));
 
-        var lat1 = DegreesToRadians(from.Latitude);
-        var lat2 = DegreesToRadians(to.Latitude);
-        var dLat = DegreesToRadians(to.Latitude - from.Latitude);
-        var dLon = DegreesToRadians(to.Longitude - from.Longitude);
-
-        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
-                Math.Cos(lat1) * Math.Cos(lat2) *
-                Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
-
-        var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
-
-        return EarthRadiusMiles * c;
+        return EarthRadiusMiles * ComputeAngularDistanceRadians(from, to);
     }
 
     /// <summary>
@@ -133,14 +112,12 @@ public static class GeospatialExtensions
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
 
-        var coordinates = source.ToList();
-        if (coordinates.Count == 0) throw new InvalidOperationException("Sequence contains no elements");
-
         var x = 0.0;
         var y = 0.0;
         var z = 0.0;
+        var count = 0;
 
-        foreach (var coord in coordinates)
+        foreach (var coord in source)
         {
             var lat = DegreesToRadians(coord.Latitude);
             var lon = DegreesToRadians(coord.Longitude);
@@ -148,9 +125,12 @@ public static class GeospatialExtensions
             x += Math.Cos(lat) * Math.Cos(lon);
             y += Math.Cos(lat) * Math.Sin(lon);
             z += Math.Sin(lat);
+            count++;
         }
 
-        var total = coordinates.Count;
+        if (count == 0) throw new InvalidOperationException("Sequence contains no elements");
+
+        var total = count;
         x /= total;
         y /= total;
         z /= total;
@@ -185,13 +165,23 @@ public static class GeospatialExtensions
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
 
-        var coordinates = source.ToList();
-        if (coordinates.Count == 0) throw new InvalidOperationException("Sequence contains no elements");
+        using var enumerator = source.GetEnumerator();
+        if (!enumerator.MoveNext()) throw new InvalidOperationException("Sequence contains no elements");
 
-        var minLat = coordinates.Min(c => c.Latitude);
-        var maxLat = coordinates.Max(c => c.Latitude);
-        var minLon = coordinates.Min(c => c.Longitude);
-        var maxLon = coordinates.Max(c => c.Longitude);
+        var first = enumerator.Current;
+        var minLat = first.Latitude;
+        var maxLat = first.Latitude;
+        var minLon = first.Longitude;
+        var maxLon = first.Longitude;
+
+        while (enumerator.MoveNext())
+        {
+            var coord = enumerator.Current;
+            if (coord.Latitude < minLat) minLat = coord.Latitude;
+            if (coord.Latitude > maxLat) maxLat = coord.Latitude;
+            if (coord.Longitude < minLon) minLon = coord.Longitude;
+            if (coord.Longitude > maxLon) maxLon = coord.Longitude;
+        }
 
         return new GeoBounds(minLat, maxLat, minLon, maxLon);
     }
@@ -226,7 +216,7 @@ public static class GeospatialExtensions
                 var from = coordinates[i];
                 var to = coordinates[j];
                 var distanceKm = from.HaversineDistance(to);
-                var distanceMiles = from.HaversineDistanceMiles(to);
+                var distanceMiles = distanceKm * KmToMiles;
 
                 yield return new GeoDistance(from, to, distanceKm, distanceMiles);
             }
@@ -248,7 +238,7 @@ public static class GeospatialExtensions
             var from = coordinates[i];
             var to = coordinates[i + 1];
             var distanceKm = from.HaversineDistance(to);
-            var distanceMiles = from.HaversineDistanceMiles(to);
+            var distanceMiles = distanceKm * KmToMiles;
 
             yield return new GeoDistance(from, to, distanceKm, distanceMiles);
         }
@@ -261,7 +251,24 @@ public static class GeospatialExtensions
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
 
-        return source.ConsecutiveDistances().Sum(d => d.DistanceKm);
+        using var enumerator = source.GetEnumerator();
+        if (!enumerator.MoveNext()) throw new InvalidOperationException("Sequence must contain at least two elements");
+
+        var previous = enumerator.Current;
+        var total = 0.0;
+        var count = 1;
+
+        while (enumerator.MoveNext())
+        {
+            var current = enumerator.Current;
+            total += previous.HaversineDistance(current);
+            previous = current;
+            count++;
+        }
+
+        if (count < 2) throw new InvalidOperationException("Sequence must contain at least two elements");
+
+        return total;
     }
 
     /// <summary>
@@ -292,33 +299,34 @@ public static class GeospatialExtensions
         if (thresholdKm <= 0) throw new ArgumentException("Threshold must be greater than zero", nameof(thresholdKm));
 
         var items = source.ToList();
+        var coordinates = items.Select(coordinateSelector).ToList();
         var clusters = new Dictionary<int, List<T>>();
-        var clusterAssignments = new Dictionary<int, int>();
+        var assigned = new bool[items.Count];
         var nextClusterId = 0;
 
         for (var i = 0; i < items.Count; i++)
         {
-            if (clusterAssignments.ContainsKey(i))
+            if (assigned[i])
                 continue;
 
             var currentCluster = nextClusterId++;
             clusters[currentCluster] = new List<T> { items[i] };
-            clusterAssignments[i] = currentCluster;
+            assigned[i] = true;
 
-            var coord1 = coordinateSelector(items[i]);
+            var coord1 = coordinates[i];
 
             for (var j = i + 1; j < items.Count; j++)
             {
-                if (clusterAssignments.ContainsKey(j))
+                if (assigned[j])
                     continue;
 
-                var coord2 = coordinateSelector(items[j]);
+                var coord2 = coordinates[j];
                 var distance = coord1.HaversineDistance(coord2);
 
                 if (distance <= thresholdKm)
                 {
                     clusters[currentCluster].Add(items[j]);
-                    clusterAssignments[j] = currentCluster;
+                    assigned[j] = true;
                 }
             }
         }
@@ -329,6 +337,25 @@ public static class GeospatialExtensions
 
     private static double DegreesToRadians(double degrees) => degrees * Math.PI / 180.0;
     private static double RadiansToDegrees(double radians) => radians * 180.0 / Math.PI;
+
+    private static double ComputeAngularDistanceRadians(GeoCoordinate from, GeoCoordinate to)
+    {
+        var lat1 = DegreesToRadians(from.Latitude);
+        var lat2 = DegreesToRadians(to.Latitude);
+        var dLat = DegreesToRadians(to.Latitude - from.Latitude);
+        var dLon = DegreesToRadians(to.Longitude - from.Longitude);
+
+        var sinHalfDLat = Math.Sin(dLat * 0.5);
+        var sinHalfDLon = Math.Sin(dLon * 0.5);
+
+        var a = sinHalfDLat * sinHalfDLat +
+                Math.Cos(lat1) * Math.Cos(lat2) * sinHalfDLon * sinHalfDLon;
+
+        // Clamp to [0, 1] to protect against slight floating-point drift.
+        a = Math.Clamp(a, 0.0, 1.0);
+
+        return 2.0 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1.0 - a));
+    }
 
     private class Grouping<TKey, TElement> : IGrouping<TKey, TElement>
     {

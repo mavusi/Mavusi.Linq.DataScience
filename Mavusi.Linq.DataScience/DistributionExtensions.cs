@@ -16,8 +16,7 @@ public static class DistributionExtensions
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
 
-        var sorted = source.OrderBy(x => x).ToList();
-        if (sorted.Count == 0) throw new InvalidOperationException("Sequence contains no elements");
+        var sorted = MaterializeAndSort(source);
 
         int count = sorted.Count;
         if (count % 2 == 0)
@@ -60,10 +59,34 @@ public static class DistributionExtensions
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
 
-        var groups = source.GroupBy(x => x).ToList();
-        if (groups.Count == 0) throw new InvalidOperationException("Sequence contains no elements");
+        var counts = new Dictionary<T, int>();
+        var hasItems = false;
+        var maxCount = 0;
+        T mode = default!;
 
-        return groups.OrderByDescending(g => g.Count()).First().Key;
+        foreach (var item in source)
+        {
+            hasItems = true;
+
+            var count = 1;
+            if (counts.TryGetValue(item, out var existing))
+            {
+                count = existing + 1;
+            }
+
+            counts[item] = count;
+
+            // Strictly greater preserves the first encountered item in ties.
+            if (count > maxCount)
+            {
+                maxCount = count;
+                mode = item;
+            }
+        }
+
+        if (!hasItems) throw new InvalidOperationException("Sequence contains no elements");
+
+        return mode;
     }
 
     /// <summary>
@@ -111,10 +134,8 @@ public static class DistributionExtensions
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
 
-        var values = source.ToList();
-        if (values.Count == 0) throw new InvalidOperationException("Sequence contains no elements");
-
-        return values.Quartile(3) - values.Quartile(1);
+        var sorted = MaterializeAndSort(source);
+        return PercentileFromSorted(sorted, 75.0) - PercentileFromSorted(sorted, 25.0);
     }
 
     /// <summary>
@@ -148,24 +169,8 @@ public static class DistributionExtensions
         if (percentile < 0 || percentile > 100)
             throw new ArgumentException("Percentile must be between 0 and 100", nameof(percentile));
 
-        var sorted = source.OrderBy(x => x).ToList();
-        if (sorted.Count == 0) throw new InvalidOperationException("Sequence contains no elements");
-
-        if (percentile == 0) return sorted[0];
-        if (percentile == 100) return sorted[^1];
-
-        // Linear interpolation between closest ranks
-        double rank = (percentile / 100.0) * (sorted.Count - 1);
-        int lowerIndex = (int)Math.Floor(rank);
-        int upperIndex = (int)Math.Ceiling(rank);
-
-        if (lowerIndex == upperIndex)
-        {
-            return sorted[lowerIndex];
-        }
-
-        double fraction = rank - lowerIndex;
-        return sorted[lowerIndex] + fraction * (sorted[upperIndex] - sorted[lowerIndex]);
+        var sorted = MaterializeAndSort(source);
+        return PercentileFromSorted(sorted, percentile);
     }
 
     /// <summary>
@@ -196,19 +201,16 @@ public static class DistributionExtensions
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
 
-        var values = source.ToList();
-        if (values.Count < 3) throw new InvalidOperationException("Sequence must contain at least three elements");
+        var moments = ComputeMoments(source);
+        if (moments.Count < 3) throw new InvalidOperationException("Sequence must contain at least three elements");
+        if (moments.M2 == 0) return 0;
 
-        double mean = values.Average();
-        double n = values.Count;
+        double n = moments.Count;
+        double m2 = moments.M2 / n;
+        double m3 = moments.M3 / n;
 
-        double m3 = values.Sum(x => Math.Pow(x - mean, 3)) / n;
-        double m2 = values.Sum(x => Math.Pow(x - mean, 2)) / n;
-
-        if (m2 == 0) return 0;
-
-        // Sample skewness with bias correction
-        double skewness = m3 / Math.Pow(m2, 1.5);
+        // Sample skewness with bias correction.
+        double skewness = m3 / (m2 * Math.Sqrt(m2));
         return skewness * Math.Sqrt(n * (n - 1)) / (n - 2);
     }
 
@@ -240,19 +242,16 @@ public static class DistributionExtensions
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
 
-        var values = source.ToList();
-        if (values.Count < 4) throw new InvalidOperationException("Sequence must contain at least four elements");
+        var moments = ComputeMoments(source);
+        if (moments.Count < 4) throw new InvalidOperationException("Sequence must contain at least four elements");
+        if (moments.M2 == 0) return 0;
 
-        double mean = values.Average();
-        double n = values.Count;
+        double n = moments.Count;
+        double m2 = moments.M2 / n;
+        double m4 = moments.M4 / n;
 
-        double m4 = values.Sum(x => Math.Pow(x - mean, 4)) / n;
-        double m2 = values.Sum(x => Math.Pow(x - mean, 2)) / n;
-
-        if (m2 == 0) return 0;
-
-        // Sample excess kurtosis with bias correction
-        double kurtosis = m4 / Math.Pow(m2, 2) - 3.0;
+        // Sample excess kurtosis with bias correction.
+        double kurtosis = m4 / (m2 * m2) - 3.0;
         double adjustment = (n - 1) / ((n - 2) * (n - 3));
         return adjustment * ((n + 1) * kurtosis + 6);
     }
@@ -283,10 +282,20 @@ public static class DistributionExtensions
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
 
-        var values = source.ToList();
-        if (values.Count == 0) throw new InvalidOperationException("Sequence contains no elements");
+        using var enumerator = source.GetEnumerator();
+        if (!enumerator.MoveNext()) throw new InvalidOperationException("Sequence contains no elements");
 
-        return values.Max() - values.Min();
+        var min = enumerator.Current;
+        var max = enumerator.Current;
+
+        while (enumerator.MoveNext())
+        {
+            var value = enumerator.Current;
+            if (value < min) min = value;
+            if (value > max) max = value;
+        }
+
+        return max - min;
     }
 
     /// <summary>
@@ -318,8 +327,88 @@ public static class DistributionExtensions
         var values = source.ToList();
         if (values.Count == 0) throw new InvalidOperationException("Sequence contains no elements");
 
-        double mean = values.Average();
-        return values.Average(x => Math.Abs(x - mean));
+        double sum = 0;
+        for (int i = 0; i < values.Count; i++)
+        {
+            sum += values[i];
+        }
+
+        double mean = sum / values.Count;
+        double absoluteDeviationSum = 0;
+
+        for (int i = 0; i < values.Count; i++)
+        {
+            absoluteDeviationSum += Math.Abs(values[i] - mean);
+        }
+
+        return absoluteDeviationSum / values.Count;
+    }
+
+    private static List<double> MaterializeAndSort(IEnumerable<double> source)
+    {
+        var sorted = source.ToList();
+        if (sorted.Count == 0) throw new InvalidOperationException("Sequence contains no elements");
+
+        sorted.Sort();
+        return sorted;
+    }
+
+    private static double PercentileFromSorted(IReadOnlyList<double> sorted, double percentile)
+    {
+        if (percentile == 0) return sorted[0];
+        if (percentile == 100) return sorted[sorted.Count - 1];
+
+        // Linear interpolation between closest ranks (R-7 / Excel).
+        double rank = (percentile / 100.0) * (sorted.Count - 1);
+        int lowerIndex = (int)Math.Floor(rank);
+        int upperIndex = (int)Math.Ceiling(rank);
+
+        if (lowerIndex == upperIndex)
+        {
+            return sorted[lowerIndex];
+        }
+
+        double fraction = rank - lowerIndex;
+        return sorted[lowerIndex] + fraction * (sorted[upperIndex] - sorted[lowerIndex]);
+    }
+
+    private static MomentStats ComputeMoments(IEnumerable<double> source)
+    {
+        var stats = new MomentStats();
+
+        foreach (var value in source)
+        {
+            stats.Add(value);
+        }
+
+        return stats;
+    }
+
+    private struct MomentStats
+    {
+        public int Count { get; private set; }
+        public double Mean { get; private set; }
+        public double M2 { get; private set; }
+        public double M3 { get; private set; }
+        public double M4 { get; private set; }
+
+        public void Add(double value)
+        {
+            int n1 = Count;
+            Count++;
+
+            double delta = value - Mean;
+            double deltaN = delta / Count;
+            double deltaN2 = deltaN * deltaN;
+            double term1 = delta * deltaN * n1;
+
+            Mean += deltaN;
+            M4 += term1 * deltaN2 * (Count * Count - 3 * Count + 3)
+                + 6 * deltaN2 * M2
+                - 4 * deltaN * M3;
+            M3 += term1 * deltaN * (Count - 2) - 3 * deltaN * M2;
+            M2 += term1;
+        }
     }
 
     /// <summary>
