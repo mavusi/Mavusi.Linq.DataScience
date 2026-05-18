@@ -8,7 +8,7 @@
 
     <!-- NuGet Package Metadata -->
     <PackageId>Mavusi.Linq.DataScience</PackageId>
-    <Version>3.0.1</Version>
+    <Version>3.1.0</Version>
     <Authors>Mavusi</Authors>
     <Company>Mavusi</Company>
     <Description>A comprehensive .NET library that extends LINQ to Objects with powerful statistical and data science features. Includes: correlation, covariance, standard deviation, variance, distribution analysis (median, quartiles, percentiles, skewness, kurtosis), rolling windows, time-series analysis, linear algebra operations, and geospatial analysis (Haversine distance, radius filtering, nearest neighbor). For GPU-accelerated versions with up to 100x performance on large datasets, also install Mavusi.Linq.DataScience.GpuBound package.</Description>
@@ -18,8 +18,8 @@
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageReleaseNotes>Version 3.0.0: MAJOR UPDATE - Separated GPU acceleration into dedicated Mavusi.Linq.DataScience.GpuBound package. This package now focuses on CPU-optimized implementations without ILGPU dependencies. For GPU-accelerated methods with up to 100x performance on large datasets, install Mavusi.Linq.DataScience.GpuBound alongside this package. All existing CPU methods remain unchanged and fully functional.</PackageReleaseNotes>
-    <Copyright>Copyright (c) 2025 Mavusi</Copyright>
+    <PackageReleaseNotes>Version 3.1.0: Performance and precision improvements across core CPU extensions. Optimized correlation/covariance, statistical moments, rolling windows, linear algebra hot paths, geospatial calculations, and time-series operations to reduce allocations and improve numerical stability while preserving existing APIs.</PackageReleaseNotes>
+    <Copyright>Copyright (c) 2026 Mavusi</Copyright>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>

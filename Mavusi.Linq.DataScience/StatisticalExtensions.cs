@@ -9,12 +9,10 @@ public static class StatisticalExtensions
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
 
-        var values = source.ToList();
-        if (values.Count == 0) throw new InvalidOperationException("Sequence contains no elements");
+        var stats = ComputeRunningStats(source);
+        if (stats.Count == 0) throw new InvalidOperationException("Sequence contains no elements");
 
-        var mean = values.Average();
-        var sumOfSquares = values.Sum(x => Math.Pow(x - mean, 2));
-        return Math.Sqrt(sumOfSquares / values.Count);
+        return Math.Sqrt(stats.M2 / stats.Count);
     }
 
     /// <summary>
@@ -24,12 +22,10 @@ public static class StatisticalExtensions
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
 
-        var values = source.ToList();
-        if (values.Count <= 1) throw new InvalidOperationException("Sequence must contain at least two elements");
+        var stats = ComputeRunningStats(source);
+        if (stats.Count <= 1) throw new InvalidOperationException("Sequence must contain at least two elements");
 
-        var mean = values.Average();
-        var sumOfSquares = values.Sum(x => Math.Pow(x - mean, 2));
-        return Math.Sqrt(sumOfSquares / (values.Count - 1));
+        return Math.Sqrt(stats.M2 / (stats.Count - 1));
     }
 
     /// <summary>
@@ -61,11 +57,10 @@ public static class StatisticalExtensions
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
 
-        var values = source.ToList();
-        if (values.Count == 0) throw new InvalidOperationException("Sequence contains no elements");
+        var stats = ComputeRunningStats(source);
+        if (stats.Count == 0) throw new InvalidOperationException("Sequence contains no elements");
 
-        var mean = values.Average();
-        return values.Sum(x => Math.Pow(x - mean, 2)) / values.Count;
+        return stats.M2 / stats.Count;
     }
 
     /// <summary>
@@ -75,10 +70,38 @@ public static class StatisticalExtensions
     {
         if (source == null) throw new ArgumentNullException(nameof(source));
 
-        var values = source.ToList();
-        if (values.Count <= 1) throw new InvalidOperationException("Sequence must contain at least two elements");
+        var stats = ComputeRunningStats(source);
+        if (stats.Count <= 1) throw new InvalidOperationException("Sequence must contain at least two elements");
 
-        var mean = values.Average();
-        return values.Sum(x => Math.Pow(x - mean, 2)) / (values.Count - 1);
+        return stats.M2 / (stats.Count - 1);
+    }
+
+    private static RunningStats ComputeRunningStats(IEnumerable<double> source)
+    {
+        var stats = new RunningStats();
+
+        foreach (var value in source)
+        {
+            stats.Add(value);
+        }
+
+        return stats;
+    }
+
+    private struct RunningStats
+    {
+        public int Count { get; private set; }
+        public double Mean { get; private set; }
+        public double M2 { get; private set; }
+
+        public void Add(double value)
+        {
+            Count++;
+
+            var delta = value - Mean;
+            Mean += delta / Count;
+            var delta2 = value - Mean;
+            M2 += delta * delta2;
+        }
     }
 }

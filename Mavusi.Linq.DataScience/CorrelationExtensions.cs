@@ -11,24 +11,11 @@ public static class CorrelationExtensions
     {
         if (sourceX == null) throw new ArgumentNullException(nameof(sourceX));
         if (sourceY == null) throw new ArgumentNullException(nameof(sourceY));
+        var stats = ComputePairStats(sourceX, sourceY);
 
-        var x = sourceX.ToList();
-        var y = sourceY.ToList();
+        if (stats.SumSquaresX <= 0 || stats.SumSquaresY <= 0) return 0;
 
-        if (x.Count == 0) throw new InvalidOperationException("Source X contains no elements");
-        if (y.Count == 0) throw new InvalidOperationException("Source Y contains no elements");
-        if (x.Count != y.Count) throw new ArgumentException("Sequences must have the same length");
-
-        var meanX = x.Average();
-        var meanY = y.Average();
-
-        var covariance = x.Zip(y, (xi, yi) => (xi - meanX) * (yi - meanY)).Sum();
-        var stdX = Math.Sqrt(x.Sum(xi => Math.Pow(xi - meanX, 2)));
-        var stdY = Math.Sqrt(y.Sum(yi => Math.Pow(yi - meanY, 2)));
-
-        if (stdX == 0 || stdY == 0) return 0;
-
-        return covariance / (stdX * stdY);
+        return stats.SumCross / Math.Sqrt(stats.SumSquaresX * stats.SumSquaresY);
     }
 
     /// <summary>
@@ -42,11 +29,11 @@ public static class CorrelationExtensions
         if (selectorX == null) throw new ArgumentNullException(nameof(selectorX));
         if (selectorY == null) throw new ArgumentNullException(nameof(selectorY));
 
-        var values = source.ToList();
-        var x = values.Select(selectorX);
-        var y = values.Select(selectorY);
+        var stats = ComputePairStats(source, selectorX, selectorY);
 
-        return x.Correlation(y);
+        if (stats.SumSquaresX <= 0 || stats.SumSquaresY <= 0) return 0;
+
+        return stats.SumCross / Math.Sqrt(stats.SumSquaresX * stats.SumSquaresY);
     }
 
     /// <summary>
@@ -57,17 +44,8 @@ public static class CorrelationExtensions
         if (sourceX == null) throw new ArgumentNullException(nameof(sourceX));
         if (sourceY == null) throw new ArgumentNullException(nameof(sourceY));
 
-        var x = sourceX.ToList();
-        var y = sourceY.ToList();
-
-        if (x.Count == 0) throw new InvalidOperationException("Source X contains no elements");
-        if (y.Count == 0) throw new InvalidOperationException("Source Y contains no elements");
-        if (x.Count != y.Count) throw new ArgumentException("Sequences must have the same length");
-
-        var meanX = x.Average();
-        var meanY = y.Average();
-
-        return x.Zip(y, (xi, yi) => (xi - meanX) * (yi - meanY)).Sum() / x.Count;
+        var stats = ComputePairStats(sourceX, sourceY);
+        return stats.SumCross / stats.Count;
     }
 
     /// <summary>
@@ -81,10 +59,77 @@ public static class CorrelationExtensions
         if (selectorX == null) throw new ArgumentNullException(nameof(selectorX));
         if (selectorY == null) throw new ArgumentNullException(nameof(selectorY));
 
-        var values = source.ToList();
-        var x = values.Select(selectorX);
-        var y = values.Select(selectorY);
+        var stats = ComputePairStats(source, selectorX, selectorY);
+        return stats.SumCross / stats.Count;
+    }
 
-        return x.Covariance(y);
+    private static PairStats ComputePairStats(IEnumerable<double> sourceX, IEnumerable<double> sourceY)
+    {
+        using var enumX = sourceX.GetEnumerator();
+        using var enumY = sourceY.GetEnumerator();
+
+        if (!enumX.MoveNext()) throw new InvalidOperationException("Source X contains no elements");
+        if (!enumY.MoveNext()) throw new InvalidOperationException("Source Y contains no elements");
+
+        var stats = new PairStats();
+        stats.Add(enumX.Current, enumY.Current);
+
+        while (true)
+        {
+            var hasX = enumX.MoveNext();
+            var hasY = enumY.MoveNext();
+
+            if (hasX != hasY) throw new ArgumentException("Sequences must have the same length");
+            if (!hasX) break;
+
+            stats.Add(enumX.Current, enumY.Current);
+        }
+
+        return stats;
+    }
+
+    private static PairStats ComputePairStats<T>(
+        IEnumerable<T> source,
+        Func<T, double> selectorX,
+        Func<T, double> selectorY)
+    {
+        using var enumerator = source.GetEnumerator();
+        if (!enumerator.MoveNext()) throw new InvalidOperationException("Source contains no elements");
+
+        var stats = new PairStats();
+
+        do
+        {
+            var item = enumerator.Current;
+            stats.Add(selectorX(item), selectorY(item));
+        }
+        while (enumerator.MoveNext());
+
+        return stats;
+    }
+
+    private struct PairStats
+    {
+        public int Count { get; private set; }
+        public double MeanX { get; private set; }
+        public double MeanY { get; private set; }
+        public double SumSquaresX { get; private set; }
+        public double SumSquaresY { get; private set; }
+        public double SumCross { get; private set; }
+
+        public void Add(double x, double y)
+        {
+            Count++;
+
+            var dx = x - MeanX;
+            MeanX += dx / Count;
+
+            var dy = y - MeanY;
+            MeanY += dy / Count;
+
+            SumSquaresX += dx * (x - MeanX);
+            SumSquaresY += dy * (y - MeanY);
+            SumCross += dx * (y - MeanY);
+        }
     }
 }
